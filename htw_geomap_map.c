@@ -6,13 +6,12 @@ Map *createMap(int width, int height) {
     Map *newMap = (Map*)malloc(sizeof(Map));
     newMap->width = width;
     newMap->height = height;
-    // create top level list
-    newMap->cells = *createList(sizeof(List), width);
-    // create nested lists
-    for (int i = 0; i < width; i++) {
-        *(List*)getItem(&newMap->cells, i) = *createList(sizeof(List), height);
-    }
+    newMap->cells = malloc(sizeof(MapCell) * width * height);
     return newMap;
+}
+
+MapCell *getCell(Map *map, int x, int y) {
+    return &map->cells[(y * map->width) + x];
 }
 
 void printCell(void *val) {
@@ -20,9 +19,11 @@ void printCell(void *val) {
 }
 
 void printMap(Map *map) {
-    for (int x = 0; x < map->width; x++) {
-        List *column = (List*)getItem(&map->cells, x);
-        printList(column, &printCell);
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            int value = map->cells[(y * map->width) + x].id;
+            printf("%i", value);
+        }
+        printf("\n");
     }
-    printf("\n");
 }

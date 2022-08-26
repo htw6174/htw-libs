@@ -3,6 +3,12 @@
 
 #include <stdlib.h>
 
+#define HTW_STOPWATCH(x) { clock_t start = clock(); \
+                    x; \
+                    clock_t end = clock(); \
+                    float seconds = (float)(end - start) / CLOCKS_PER_SEC; \
+                    printf("%s finished in %.3f seconds / %li ticks\n", #x, seconds, end - start); }
+
 /* String and char utilities */
 // Corresponds to the index of 0 in the standard character set
 #define INT_CHAR_OFFSET 48
@@ -49,5 +55,26 @@ void *popItem(List *list);
 
 void printList(List *list, void(*print)(void*));
 
+// TODO
+/** Generic object pools
+ * Allows for frequent reuse of objects without reallocation of memory. Creating a pool allocates enough space for n objects once. The pool keeps track of which pool items are in use/not in use. Requesting a new object from the pool returns the pointer to an unused item, and marks that item as in use. Telling the pool to destroy an object marks it as unused. Destroying the pool frees all items from memory.
+ */
+typedef struct {
+    int capacity;
+    int itemSize;
+    void *poolItems;
+} Pool;
+
+Pool *createPool(int itemSize, int capacity);
+
+/**
+ * @brief Free all memory used by Pool [pool]
+ *
+ * @param pool pool to destroy
+ * @return >= 0: number of pool objects still in use. < 0: error
+ */
+int destroyPool(Pool *pool);
+void *getNewPoolItem(Pool *pool);
+int destroyPoolItem(Pool *pool, void *item);
 
 #endif // HTW_CORE_H_INCLUDED

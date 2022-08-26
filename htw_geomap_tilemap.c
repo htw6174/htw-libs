@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 #include "htw_geomap.h"
 
 
@@ -31,4 +32,15 @@ void printTileMap ( TileMap *map) {
         }
         printf("\n");
     }
+}
+
+void htw_getHexCellPositionSkewed(int x, int y, float *xPos, float *yPos) {
+    *yPos = sqrt(0.75) * y;
+    *xPos = x + ((float)y * 0.5);
+}
+
+void htw_getHexCellPositionStaggered(int x, int y, float *xPos, float *yPos) {
+    *yPos = sqrt(0.75) * y;
+    if (y % 2 == 1) *xPos = (double)x;
+    else *xPos = (double)x + 0.5;
 }

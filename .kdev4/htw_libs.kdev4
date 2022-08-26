@@ -1,5 +1,30 @@
 [Buildset]
 BuildItems=@Variant(\x00\x00\x00\t\x00\x00\x00\x00\x01\x00\x00\x00\x0b\x00\x00\x00\x00\x01\x00\x00\x00\x10\x00h\x00t\x00w\x00_\x00l\x00i\x00b\x00s)
 
+[CMake]
+Build Directory Count=2
+Current Build Directory Index-Host System=1
+Temporary Build Directory Index=0
+
+[CMake][CMake Build Directory 0]
+Build Directory Path=/home/htw/projects/c/htw_libs/build
+Build Type=Debug
+CMake Binary=/usr/bin/cmake
+CMake Executable=/usr/bin/cmake
+Environment Profile=
+Extra Arguments=
+Install Directory=/usr/local
+Runtime=Host System
+
+[CMake][CMake Build Directory 1]
+Build Directory Path=/home/htw/projects/c/htw_libs/release
+Build Type=Release
+CMake Binary=/usr/bin/cmake
+CMake Executable=/usr/bin/cmake
+Environment Profile=
+Extra Arguments=
+Install Directory=/usr/local
+Runtime=Host System
+
 [Project]
 VersionControlSupport=kdevgit

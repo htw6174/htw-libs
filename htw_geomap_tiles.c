@@ -21,7 +21,7 @@ static List *tileDefs;
  */
 // Return value is a unique ID that can be used to unload definitions later
 // TODO: Sort list after parsing whole file; screen for duplicate ids; consider changing spec to automatically assign ids?
-void *loadTileDefinitions (char *path) {
+void *htw_loadTileDefinitions (char *path) {
     FILE *defs = fopen(path, "r");
     tileDefs = createList(sizeof( tileDef ), 0);
     tileDef *def;
@@ -94,7 +94,7 @@ void *loadTileDefinitions (char *path) {
     return malloc(1);
 }
 
-MapTile *newTile (int id) {
+MapTile *htw_createTile (int id) {
     MapTile *c = malloc(sizeof( MapTile ));
     c->id = id;
     c->content = 0;
@@ -102,7 +102,7 @@ MapTile *newTile (int id) {
 }
 
 // TODO: Ensure that list is sorted before using this function
-char *getTileName (int id) {
+char *htw_getTileName (int id) {
     tileDef *targetDef = ( tileDef*)getItem( tileDefs, id);
     return targetDef->name;
 }

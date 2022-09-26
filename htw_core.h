@@ -2,12 +2,36 @@
 #define HTW_CORE_H_INCLUDED
 
 #include <stdlib.h>
+#include <stdio.h>
 
+/* Debug utilities */
 #define HTW_STOPWATCH(x) { clock_t start = clock(); \
                     x; \
                     clock_t end = clock(); \
                     float seconds = (float)(end - start) / CLOCKS_PER_SEC; \
                     printf("%s finished in %.3f seconds / %li ticks\n", #x, seconds, end - start); }
+
+static inline void htw_printArray(FILE* dest, void* data, unsigned int size, unsigned int count, unsigned int valuesPerLine, char* format) {
+    for (int i = 0; i < count; i++) {
+        void* p = (char*)data + (i * size);
+        fprintf(dest, format, *(unsigned int*)p);
+        // end of line
+        if (i % valuesPerLine == (valuesPerLine - 1)) fprintf(dest, "\n");
+    }
+    // if last line isn't filled, add a newline
+    if (count % valuesPerLine != 0) fprintf(dest, "\n");
+}
+
+static inline void htw_printVectorArray(FILE* dest, void* data, unsigned int dim, unsigned int count, unsigned int vecsPerLine, char* format) {
+    for (int i = 0; i < count; i++) {
+        void* p = (char*)data + (i * sizeof(float));
+        fprintf(dest, format, *(unsigned int*)p);
+        // end of line
+        if (i % vecsPerLine == (vecsPerLine - 1)) fprintf(dest, "\n");
+    }
+    // if last line isn't filled, add a newline
+    if (count % vecsPerLine != 0) fprintf(dest, "\n");
+}
 
 /* String and char utilities */
 // Corresponds to the index of 0 in the standard character set

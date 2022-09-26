@@ -10,9 +10,9 @@ typedef struct {
     void *content;
 } MapTile;
 
-void *loadTileDefinitions (char *path);
-MapTile *newTile (int id);
-char *getTileName (int id);
+void *htw_loadTileDefinitions (char *path);
+MapTile *htw_createTile (int id); // FIXME: no reason to allocate one map tile at a time. Remove when reworking tilemap system
+char *htw_getTileName (int id);
 
 typedef struct {
     int x;
@@ -43,25 +43,25 @@ typedef struct {
     int height;
     // Left to right, then top to bottom
     MapTile *tiles;
-} TileMap;
+} htw_TileMap;
 
 typedef struct {
     int width;
     int height;
     int maxValue;
     int *values;
-} ValueMap;
+} htw_ValueMap;
 
 // Allocates a map and enough space for all map elements
-TileMap *createTileMap (int width, int height);
-MapTile *getMapTile ( TileMap *map, int x, int y);
-void setMapTile ( TileMap *map, MapTile tile, int x, int y);
-void printTileMap ( TileMap *map);
+htw_TileMap *createTileMap (int width, int height);
+MapTile *getMapTile ( htw_TileMap *map, int x, int y);
+void setMapTile ( htw_TileMap *map, MapTile tile, int x, int y);
+void printTileMap ( htw_TileMap *map);
 
-ValueMap *createValueMap(int width, int height, int maxValue);
-int getMapValue (ValueMap *map, int x, int y);
-void setMapValue (ValueMap *map, int value, int x, int y);
-void printValueMap (ValueMap *map);
+htw_ValueMap *createValueMap(int width, int height, int maxValue);
+int getMapValue (htw_ValueMap *map, int x, int y);
+void setMapValue (htw_ValueMap *map, int value, int x, int y);
+void printValueMap (htw_ValueMap *map);
 
 /* Utilities for neighbors and tile position */
 void htw_getHexCellPositionSkewed(int x, int y, float *xPos, float *yPos);
@@ -69,7 +69,7 @@ void htw_getHexCellPositionSkewed(int x, int y, float *xPos, float *yPos);
 void htw_getHexCellPositionStaggered(int x, int y, float *xPos, float *yPos);
 
 /* Map generation */
-void fillGradient ( ValueMap* map, int gradStart, int gradEnd );
+void fillGradient ( htw_ValueMap* map, int gradStart, int gradEnd );
 
 
 #endif

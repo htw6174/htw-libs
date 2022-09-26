@@ -6,6 +6,25 @@
 #include <shaderc/shaderc.h>
 #include "htw_vulkan.h"
 
+static uint32_t getBestMemoryTypeIndex(htw_VkContext *vkContext, uint32_t memoryTypeBits, VkMemoryPropertyFlags propertyFlags);
+size_t getAlignedBufferSize (htw_VkContext* vkContext, size_t size, VkDeviceSize alignment);
+
+static VkShaderModule loadShaderModule(htw_VkContext *vkContext, const char *filePath);
+static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo);
+static htw_Texture createImage(htw_VkContext* vkContext, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlagBits usage, VkImageAspectFlagBits aspectFlags);
+
+static VkResult validateExtensions(uint32_t requiredCount, const char **requiredExtensions, uint32_t deviceExtCount, VkExtensionProperties *deviceExtensions);
+static void initDevice(htw_VkContext *vkContext);
+static void initDescriptorPool(htw_VkContext *vkContext);
+static void initDepthBuffer(htw_VkContext *vkContext);
+static void initSwapchainImageContext(htw_VkContext *vkContext, htw_SwapchainImageContext *imageContext);
+static void initRenderPass(htw_VkContext *vkContext);
+static void initFramebuffers(htw_VkContext *vkContext);
+static void initSwapchain(htw_VkContext *vkContext, uint32_t maxAquiredImages);
+static void initUniformBuffers(htw_VkContext *vkContext);
+static VkResult aquireNextImage(htw_VkContext *vkContext, uint32_t *imageIndex);
+VkResult presentSwapchainImage(htw_VkContext* vkContext, uint32_t index);
+
 htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow) {
     htw_VkContext *context = malloc(sizeof(htw_VkContext));
     // get sdl window dimensions
@@ -42,7 +61,7 @@ htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow) {
     VkLayerProperties layerProperties[supportedLayerCount];
     vkEnumerateInstanceLayerProperties(&supportedLayerCount, layerProperties);
 
-#ifdef DEBUG
+#ifdef VK_DEBUG
     uint32_t requestedLayerCount = 1;
     const char *layerNames[] = {"VK_LAYER_KHRONOS_validation"};
 #else
@@ -84,6 +103,13 @@ htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow) {
 
     // find and store a physical device for rendering
     initDevice(context);
+
+#ifdef VK_DEBUG
+    // log device properties
+    htw_logHardwareProperties(context);
+#endif
+
+    initDescriptorPool(context);
     // init image for depth buffer
     initDepthBuffer(context);
     // setup a swapchain of images that can be retreived, rendered to, and presented
@@ -114,6 +140,25 @@ htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow) {
     }
 
     return context;
+}
+
+void htw_logHardwareProperties(htw_VkContext *vkContext) {
+    VkPhysicalDeviceProperties deviceProperties;
+    vkGetPhysicalDeviceProperties(vkContext->gpu, &deviceProperties);
+    VkPhysicalDeviceLimits deviceLimits = deviceProperties.limits;
+    printf("API Version: %u\n", deviceProperties.apiVersion);
+    printf("Driver Version: %u\n", deviceProperties.driverVersion);
+    printf("Device Type: %u\n", deviceProperties.deviceType);
+    printf("Device Name: %s\n", deviceProperties.deviceName);
+    printf("Max image size: %u\n", deviceLimits.maxImageDimension2D);
+    printf("Max uniform buffer size: %u\n", deviceLimits.maxUniformBufferRange);
+    printf("Min uniform buffer allignment: %lu\n", deviceLimits.minUniformBufferOffsetAlignment);
+    printf("Max dynamic uniform buffers: %i\n", deviceLimits.maxDescriptorSetUniformBuffersDynamic);
+    printf("Max storage buffer size: %u\n", deviceLimits.maxStorageBufferRange);
+    printf("Min storage buffer allignment: %lu\n", deviceLimits.minStorageBufferOffsetAlignment);
+    printf("Max push constant size: %u\n", deviceLimits.maxPushConstantsSize);
+    printf("Max memory allocations: %u\n", deviceLimits.maxMemoryAllocationCount);
+    // TODO: memory heap sizes and total memory size
 }
 
 void htw_resizeWindow(htw_VkContext *vkContext, int width, int height) {
@@ -155,7 +200,7 @@ htw_Frame htw_beginFrame(htw_VkContext *vkContext) {
     return currentFrame;
 }
 
-void htw_drawPipeline ( htw_VkContext* vkContext, htw_Frame frame, htw_PipelineHandle pipelineHandle, htw_Buffer instanceBuffer, uint32_t verticiesPerInstance, uint32_t instanceCount )
+void htw_drawPipeline(htw_VkContext *vkContext, htw_Frame frame, htw_PipelineHandle pipelineHandle, htw_ShaderLayout shaderLayout, htw_ModelData modelData, htw_DrawFlags drawFlags)
 {
     // bind the graphics pipeline
     htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
@@ -177,10 +222,24 @@ void htw_drawPipeline ( htw_VkContext* vkContext, htw_Frame frame, htw_PipelineH
     vkCmdSetScissor(frame.cmd, 0, 1, &scissor);
 
     // draw vertices
+    vkCmdBindDescriptorSets(frame.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shaderLayout.pipelineLayout, 0, shaderLayout.descriptorSetCount, shaderLayout.descriptorSets, 0, NULL);
     VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(frame.cmd, 0, 1, &instanceBuffer.buffer, offsets);
+    uint32_t instanceCount = 1;
     vkCmdPushConstants(frame.cmd, currentPipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 128, currentPipeline.pushConstantData);
-    vkCmdDraw(frame.cmd, verticiesPerInstance, instanceCount, 0, 0);
+    if ((drawFlags & HTW_DRAW_TYPE_POINTS) == HTW_DRAW_TYPE_POINTS) {
+        vkCmdBindVertexBuffers(frame.cmd, 0, 1, &modelData.vertexBuffer->buffer, offsets);
+    }
+    if ((drawFlags & HTW_DRAW_TYPE_INSTANCED) == HTW_DRAW_TYPE_INSTANCED) {
+        instanceCount = modelData.instanceCount;
+        vkCmdBindVertexBuffers(frame.cmd, 0, 1, &modelData.instanceBuffer->buffer, offsets);
+    }
+    if ((drawFlags & HTW_DRAW_TYPE_INDEXED) == HTW_DRAW_TYPE_INDEXED) {
+        vkCmdBindIndexBuffer(frame.cmd, modelData.indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(frame.cmd, modelData.indexCount, instanceCount, 0, 0, 0);
+    }
+    else {
+        vkCmdDraw(frame.cmd, modelData.vertexCount, instanceCount, 0, 0);
+    }
 }
 
 void htw_endFrame(htw_VkContext *vkContext, htw_Frame frame) {
@@ -227,19 +286,151 @@ htw_ShaderHandle htw_loadShader(htw_VkContext *vkContext, const char *filePath) 
     return nextHandle;
 }
 
-htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_ShaderHandle vertShader, htw_ShaderHandle fragShader) {
+htw_ShaderLayout htw_createStandardShaderLayout (htw_VkContext *vkContext) {
+    htw_ShaderLayout newLayout = {
+        .descriptorSetCount = 1,
+        .descriptorSetLayouts = malloc(sizeof(VkDescriptorSetLayout) * newLayout.descriptorSetCount), // TODO: better allocator
+        .descriptorSets = malloc(sizeof(VkDescriptorSet) * newLayout.descriptorSetCount) // TODO: better allocator
+    };
+
+    // define shader uniform layout
+    VkDescriptorSetLayoutBinding layoutBinding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 2,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &layoutBinding
+    };
+
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, newLayout.descriptorSetLayouts));
+
+    VkPushConstantRange pvRange = {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = 128
+    };
+
+    VkPipelineLayoutCreateInfo layoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = newLayout.descriptorSetLayouts,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pvRange
+    };
+    VK_CHECK(vkCreatePipelineLayout(vkContext->device, &layoutInfo, NULL, &newLayout.pipelineLayout));
+    return newLayout;
+}
+
+htw_ShaderLayout htw_createTerrainShaderLayout (htw_VkContext *vkContext) {
+    htw_ShaderLayout newLayout = {
+        .descriptorSetCount = 1,
+        .descriptorSetLayouts = malloc(sizeof(VkDescriptorSetLayout) * newLayout.descriptorSetCount), // TODO: better allocator
+        .descriptorSets = malloc(sizeof(VkDescriptorSet) * newLayout.descriptorSetCount) // TODO: better allocator
+    };
+
+    VkDescriptorSetLayoutBinding worldInfoBinding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+    };
+
+    VkDescriptorSetLayoutBinding terrainDataBinding = {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+    };
+
+    VkDescriptorSetLayoutBinding layoutBindings[] = {worldInfoBinding, terrainDataBinding};
+
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 2,
+        .pBindings = layoutBindings
+    };
+
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, newLayout.descriptorSetLayouts));
+
+    VkDescriptorSetAllocateInfo allocateInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = vkContext->descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = newLayout.descriptorSetLayouts
+    };
+
+    vkAllocateDescriptorSets(vkContext->device, &allocateInfo, newLayout.descriptorSets);
+
+    VkPushConstantRange pvRange = {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = 128
+    };
+
+    VkPipelineLayoutCreateInfo layoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = newLayout.descriptorSetLayouts,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pvRange
+    };
+    VK_CHECK(vkCreatePipelineLayout(vkContext->device, &layoutInfo, NULL, &newLayout.pipelineLayout));
+    return newLayout;
+}
+
+void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer worldInfo, htw_Buffer terrainData) {
+
+    VkDescriptorBufferInfo worldBufferInfo = {
+        .buffer = worldInfo.buffer,
+        .offset = 0,
+        .range = worldInfo.hostSize
+    };
+    VkDescriptorBufferInfo terrainBufferInfo = {
+        .buffer = terrainData.buffer,
+        .offset = 0,
+        .range = terrainData.hostSize
+    };
+
+    VkWriteDescriptorSet worldWriteInfo = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = shaderLayout.descriptorSets[0],
+        .dstBinding = 0,
+        .dstArrayElement = 0, // used only for descriptor arrays
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &worldBufferInfo
+    };
+    VkWriteDescriptorSet terrainWriteInfo = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = shaderLayout.descriptorSets[0],
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &terrainBufferInfo
+    };
+    VkWriteDescriptorSet writeSets[] = {worldWriteInfo, terrainWriteInfo};
+    vkUpdateDescriptorSets(vkContext->device, 2, writeSets, 0, NULL);
+}
+
+htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo) {
     htw_PipelineHandle nextHandle = vkContext->pipelineCount++;
-    vkContext->pipelines[nextHandle] = createPipeline(vkContext, vkContext->shaders[vertShader], vkContext->shaders[fragShader]);
+    vkContext->pipelines[nextHandle] = createPipeline(vkContext, shaderLayout, shaderInfo);
     return nextHandle;
 }
 
-htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size) {
+htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size, htw_BufferUsageType bufferType) {
     htw_Buffer newBuffer;
     // create vkBuffer
     VkBufferCreateInfo bufferInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        .usage = bufferType,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE
     };
     vkCreateBuffer(vkContext->device, &bufferInfo, NULL, &newBuffer.buffer);
@@ -247,9 +438,11 @@ htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size) {
     newBuffer.hostData = malloc(size);
     // get device memory requirements
     vkGetBufferMemoryRequirements(vkContext->device, newBuffer.buffer, &newBuffer.deviceMemory);
+    size_t alignedSize = getAlignedBufferSize (vkContext, size, newBuffer.deviceMemory.alignment);
     // set memory offset and move tracker forward
+    newBuffer.deviceMemory.size = alignedSize;
     newBuffer.deviceOffset = vkContext->lastBufferOffset;
-    vkContext->lastBufferOffset += newBuffer.deviceMemory.size;
+    vkContext->lastBufferOffset += alignedSize;
 
     return newBuffer;
 }
@@ -280,9 +473,14 @@ void htw_finalizeBuffers(htw_VkContext *vkContext, uint32_t bufferCount, htw_Buf
     VK_CHECK(vkAllocateMemory(vkContext->device, &memoryInfo, NULL, &vkContext->deviceMemory));
 }
 
+void htw_bindBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffers) {
+    for (int i = 0; i < count; i++) {
+        vkBindBufferMemory(vkContext->device, buffers[i].buffer, vkContext->deviceMemory, buffers[i].deviceOffset);
+    }
+}
+
+// TODO: calling this per-frame runs fine right now, may need a solution with better performance later
 void htw_updateBuffer(htw_VkContext *vkContext, htw_Buffer *buffer) {
-    // bind buffer to device memory
-    vkBindBufferMemory(vkContext->device, buffer->buffer, vkContext->deviceMemory, buffer->deviceOffset);
     // copy program data to buffer
     // note: data is not always immediately copied into buffer memory. In this case the problem is solved by the use of memory with the VK_MEMORY_PROPERTY_HOST_COHERENT_BIT bit set
     // data transfer to the GPU is done later, but guaranteed to be complete before any VkQueueSubmit work is started
@@ -290,6 +488,20 @@ void htw_updateBuffer(htw_VkContext *vkContext, htw_Buffer *buffer) {
     vkMapMemory(vkContext->device, vkContext->deviceMemory, buffer->deviceOffset, buffer->deviceMemory.size, 0, &dest);
     memcpy(dest, buffer->hostData, buffer->hostSize);
     vkUnmapMemory(vkContext->device, vkContext->deviceMemory);
+}
+
+void htw_updateBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffers) {
+    for (int i = 0; i < count; i++) {
+        htw_updateBuffer(vkContext, &buffers[i]);
+    }
+}
+
+htw_Texture htw_createMappedTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height) {
+    return createImage(vkContext, width, height, VK_FORMAT_R16G16B16A16_SSCALED, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+}
+
+void htw_updateTexture(htw_VkContext *vkContext, htw_Buffer source, htw_Texture dest) {
+
 }
 
 void htw_mapPipelinePushConstant(htw_VkContext *vkContext, htw_PipelineHandle pipeline, void *pushConstantData) {
@@ -323,6 +535,16 @@ static uint32_t getBestMemoryTypeIndex(htw_VkContext *vkContext, uint32_t memory
         fprintf(stderr, "No suitable device memory found for buffer\n");
     }
     return memoryTypeIndex;
+}
+
+size_t getAlignedBufferSize (htw_VkContext* vkContext, size_t size, VkDeviceSize alignment) {
+    size_t alignedSize = size; // return same size if it fits cleanly
+    int diff = size % alignment;
+    if (diff != 0) {
+        // if there is an uneven remainder, increase to the next multiple of alignment
+        alignedSize = size + (alignment - diff);
+    }
+    return alignedSize;
 }
 
 static VkShaderModule loadShaderModule(htw_VkContext *vkContext, const char *filePath) {
@@ -388,59 +610,93 @@ static VkShaderModule loadShaderModule(htw_VkContext *vkContext, const char *fil
     return shaderModule;
 }
 
-static htw_Pipeline createPipeline(htw_VkContext *vkContext, VkShaderModule vertShader, VkShaderModule fragShader) {
+static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo) {
     htw_Pipeline newPipeline;
+    newPipeline.pipelineLayout = shaderLayout.pipelineLayout;
 
-    // define shader uniform layout TODO: move this to another method?
-    VkDescriptorSetLayoutBinding layoutBinding = {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 2,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-    };
-
-    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &layoutBinding
-    };
-
-    VkDescriptorSetLayout descriptorLayout;
-    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, &descriptorLayout));
-
-    VkPushConstantRange pvRange = {
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        .offset = 0,
-        .size = 128
-    };
-
-    VkPipelineLayoutCreateInfo layoutInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &descriptorLayout,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pvRange
-    };
-    VK_CHECK(vkCreatePipelineLayout(vkContext->device, &layoutInfo, NULL, &newPipeline.pipelineLayout));
-
-    // TEST: instance input description hardcoded for hexmap position
-    VkVertexInputBindingDescription bindingDescription = {
-        .binding = 0,
-        .stride = sizeof(float) * 4,
-        .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE,
-    };
-    VkVertexInputAttributeDescription attributeDescription = {
-        .location = 0, // refers to location set in shader input layout
-        .binding = 0, // index into the array of bound vertex buffers. Must match corresponding binding description
-        .format = VK_FORMAT_R32G32B32A32_SFLOAT, // usually something between VK_FORMAT_R32_SFLOAT for float, and VK_FORMAT_R32G32B32A32_SFLOAT for vec4
-        .offset = 0 // from start of vertex or instance element in bytes
-    };
+    // bind vertex shader inputs
+    // FIXME/TODO: this will not work for shaders that use both vertex and instance buffers
+    VkVertexInputBindingDescription bindingDescriptions[16];
+    VkVertexInputAttributeDescription attributeDescriptions[16];
+    int d = 0; // tracks description index
+    for (int i = 0; i < shaderInfo.vertexInputCount; i++, d++) {
+        htw_ShaderInputInfo layoutInfo = shaderInfo.vertexInputInfos[i];
+        VkVertexInputBindingDescription bindingDescription = {
+            .binding = 0,
+            .stride = shaderInfo.vertexInputStride,
+            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+        };
+        bindingDescriptions[d] = bindingDescription;
+        // determine format to use
+        VkFormat format;
+        switch (layoutInfo.size) {
+            case 4:
+                format = VK_FORMAT_R32_SFLOAT;
+                break;
+            case 8:
+                format = VK_FORMAT_R32G32_SFLOAT;
+                break;
+            case 12:
+                format = VK_FORMAT_R32G32B32_SFLOAT;
+                break;
+            case 16:
+                format = VK_FORMAT_R32G32B32A32_SFLOAT;
+                break;
+            default:
+                format = VK_FORMAT_UNDEFINED;
+                fprintf(stderr, "Invalid vertex input attribute size: %u", layoutInfo.size);
+                break;
+        }
+        VkVertexInputAttributeDescription attributeDescription = {
+            .location = i, // refers to location set in shader input layout
+            .binding = 0, // index into the array of bound vertex buffers. Must match corresponding binding description
+            .format = format, // usually something between VK_FORMAT_R32_SFLOAT for float, and VK_FORMAT_R32G32B32A32_SFLOAT for vec4
+            .offset = layoutInfo.offset // from start of vertex or instance element in bytes
+        };
+        attributeDescriptions[d] = attributeDescription;
+    }
+    for (int i = 0; i < shaderInfo.instanceInputCount; i++, d++) {
+        htw_ShaderInputInfo layoutInfo = shaderInfo.instanceInputInfos[i];
+        VkVertexInputBindingDescription bindingDescription = {
+            .binding = 0,
+            .stride = shaderInfo.instanceInputStride,
+            .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE,
+        };
+        bindingDescriptions[d] = bindingDescription;
+        // determine format to use
+        VkFormat format;
+        switch (layoutInfo.size) {
+            case 4:
+                format = VK_FORMAT_R32_SFLOAT;
+                break;
+            case 8:
+                format = VK_FORMAT_R32G32_SFLOAT;
+                break;
+            case 12:
+                format = VK_FORMAT_R32G32B32_SFLOAT;
+                break;
+            case 16:
+                format = VK_FORMAT_R32G32B32A32_SFLOAT;
+                break;
+            default:
+                format = VK_FORMAT_UNDEFINED;
+                fprintf(stderr, "Invalid instance input attribute size: %u", layoutInfo.size);
+                break;
+        }
+        VkVertexInputAttributeDescription attributeDescription = {
+            .location = i, // refers to location set in shader input layout
+            .binding = 0, // index into the array of bound vertex buffers. Must match corresponding binding description
+            .format = format, // usually something between VK_FORMAT_R32_SFLOAT for float, and VK_FORMAT_R32G32B32A32_SFLOAT for vec4
+            .offset = layoutInfo.offset // from start of vertex or instance element in bytes
+        };
+        attributeDescriptions[d] = attributeDescription;
+    }
     VkPipelineVertexInputStateCreateInfo vertexInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = 1,
-        .pVertexBindingDescriptions = &bindingDescription,
-        .vertexAttributeDescriptionCount = 1,
-        .pVertexAttributeDescriptions = &attributeDescription
+        .vertexBindingDescriptionCount = d,
+        .pVertexBindingDescriptions = bindingDescriptions,
+        .vertexAttributeDescriptionCount = d,
+        .pVertexAttributeDescriptions = attributeDescriptions
     };
 
     // use simple triangle lists
@@ -501,13 +757,14 @@ static htw_Pipeline createPipeline(htw_VkContext *vkContext, VkShaderModule vert
         .pDynamicStates = dynamics
     };
 
+    VkShaderModule vertShader = vkContext->shaders[shaderInfo.vertexShader];
+    VkShaderModule fragShader = vkContext->shaders[shaderInfo.fragmentShader];
     VkPipelineShaderStageCreateInfo vertShaderInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_VERTEX_BIT,
         .module = vertShader,
         .pName = "main"
     };
-
     VkPipelineShaderStageCreateInfo fragShaderInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -537,6 +794,65 @@ static htw_Pipeline createPipeline(htw_VkContext *vkContext, VkShaderModule vert
 
     // TODO: destroy shader modules after creation
     return newPipeline;
+}
+
+static htw_Texture createImage(htw_VkContext *vkContext, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlagBits usage, VkImageAspectFlagBits aspectFlags) {
+    htw_Texture newTexture = {
+        .format = format
+    };
+
+    VkImage newImage;
+    VkImageCreateInfo imageInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent.width = width,
+        .extent.height = height,
+        .extent.depth = 1,
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+    };
+    vkCreateImage(vkContext->device, &imageInfo, NULL, &newImage);
+
+    VkMemoryRequirements memoryRequirements;
+    vkGetImageMemoryRequirements(vkContext->device, newImage, &memoryRequirements);
+    VkMemoryAllocateInfo memoryInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memoryRequirements.size,
+        .memoryTypeIndex = getBestMemoryTypeIndex(vkContext, memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+    };
+    // NOTE: because my use case has few textures, using seperate allocations is fine for now
+    // TODO: methods to declare images before allocating device memory for all images at once
+    vkAllocateMemory(vkContext->device, &memoryInfo, NULL, &newTexture.deviceMemory);
+    vkBindImageMemory(vkContext->device, newImage, newTexture.deviceMemory, 0);
+
+    VkImageSubresourceRange subresource = {
+        .levelCount = 1,
+        .layerCount = 1,
+        .aspectMask = aspectFlags
+    };
+    VkComponentMapping mapping = {
+        .r = VK_COMPONENT_SWIZZLE_R,
+        .g = VK_COMPONENT_SWIZZLE_G,
+        .b = VK_COMPONENT_SWIZZLE_B,
+        .a = VK_COMPONENT_SWIZZLE_A
+    };
+    VkImageViewCreateInfo viewInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .image = newImage,
+        .subresourceRange = subresource,
+        .components = mapping // identity swizzle is 0, so this can be left unassigned
+    };
+    VK_CHECK(vkCreateImageView(vkContext->device, &viewInfo, NULL, &newTexture.view));
+
+    return newTexture;
 }
 
 static VkResult validateExtensions ( uint32_t requiredCount, const char** requiredExtensions, uint32_t deviceExtCount, VkExtensionProperties* deviceExtensions )
@@ -619,56 +935,30 @@ void initDevice(htw_VkContext *vkContext) {
     vkGetDeviceQueue(vkContext->device, vkContext->graphicsQueueIndex, 0, &vkContext->queue);
 }
 
+static void initDescriptorPool(htw_VkContext *vkContext) {
+    // TODO
+    uint32_t poolTypeCount = 3;
+    VkDescriptorType poolTypes[] = {VK_DESCRIPTOR_TYPE_SAMPLER, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+    VkDescriptorPoolSize poolSizes[3];
+    for (int i = 0; i < poolTypeCount; i++) {
+        VkDescriptorPoolSize poolSize = {
+            .type = poolTypes[i],
+            .descriptorCount = 100
+        };
+        poolSizes[i] = poolSize;
+    }
+    VkDescriptorPoolCreateInfo poolInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 100,
+        .poolSizeCount = poolTypeCount,
+        .pPoolSizes = poolSizes
+    };
+    VK_CHECK(vkCreateDescriptorPool(vkContext->device, &poolInfo, NULL, &vkContext->descriptorPool));
+}
+
 static void initDepthBuffer(htw_VkContext *vkContext) {
-    vkContext->depthImageFormat = VK_FORMAT_D24_UNORM_S8_UINT; // TODO: find device compatible format
-    VkImage depthImage;
-    VkImageCreateInfo imageInfo = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType = VK_IMAGE_TYPE_2D,
-        .format = vkContext->depthImageFormat,
-        .extent.width = vkContext->width,
-        .extent.height = vkContext->height,
-        .extent.depth = 1,
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
-    };
-    vkCreateImage(vkContext->device, &imageInfo, NULL, &depthImage);
-
-    VkMemoryRequirements depthMemoryRequirements;
-    vkGetImageMemoryRequirements(vkContext->device, depthImage, &depthMemoryRequirements);
-    VkMemoryAllocateInfo memoryInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = depthMemoryRequirements.size,
-        .memoryTypeIndex = getBestMemoryTypeIndex(vkContext, depthMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-    };
-    vkAllocateMemory(vkContext->device, &memoryInfo, NULL, &vkContext->depthImageMemory);
-    vkBindImageMemory(vkContext->device, depthImage, vkContext->depthImageMemory, 0);
-
-    VkImageSubresourceRange subresource = {
-        .levelCount = 1,
-        .layerCount = 1,
-        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT
-    };
-    VkComponentMapping mapping = {
-        .r = VK_COMPONENT_SWIZZLE_R,
-        .g = VK_COMPONENT_SWIZZLE_G,
-        .b = VK_COMPONENT_SWIZZLE_B,
-        .a = VK_COMPONENT_SWIZZLE_A
-    };
-    VkImageViewCreateInfo viewInfo = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = vkContext->depthImageFormat,
-        .image = depthImage,
-        .subresourceRange = subresource,
-        .components = mapping
-    };
-    VK_CHECK(vkCreateImageView(vkContext->device, &viewInfo, NULL, &vkContext->depthImageView));
+    // TODO: find device compatible format
+    vkContext->depthBuffer = createImage(vkContext, vkContext->width, vkContext->height, VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
 void initSwapchainImageContext(htw_VkContext *vkContext, htw_SwapchainImageContext *imageContext){
@@ -787,7 +1077,7 @@ void initRenderPass(htw_VkContext *vkContext) {
     // NOTE: stencil bits in color format are unused for now, but likely useful later
     VkAttachmentDescription depthAttachment = {
         .flags = 0,
-        .format = vkContext->depthImageFormat,
+        .format = vkContext->depthBuffer.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -843,7 +1133,7 @@ void initFramebuffers(htw_VkContext *vkContext) {
     vkContext->swapchainFramebuffers = malloc(sizeof(VkFramebuffer) * vkContext->swapchainImageCount);
 
     for (int i = 0; i < vkContext->swapchainImageCount; i++) {
-        VkImageView imageViews[] = {vkContext->swapchainImageViews[i], vkContext->depthImageView};
+        VkImageView imageViews[] = {vkContext->swapchainImageViews[i], vkContext->depthBuffer.view};
         VkFramebufferCreateInfo info = {
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
             .renderPass = vkContext->renderPass,

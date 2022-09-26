@@ -4,6 +4,8 @@
 #ifndef HTW_RANDOM_H_INCLUDED
 #define HTW_RANDOM_H_INCLUDED
 
+#include <math.h>
+
 extern int htw_randRange(int range);
 
 /* Basics */

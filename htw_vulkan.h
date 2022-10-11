@@ -15,10 +15,14 @@
 #endif
 
 #define HTW_VK_WINDOW_FLAGS SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN
+#define HTW_VK_MAX_SHADERS 100
+#define HTW_VK_MAX_PIPELINES 100
+#define HTW_VK_MAX_BUFFERS 100
 #define HTW_SHADER_MAX_LENGTH 10000
 #define HTW_MAX_AQUIRED_IMAGES 2
 
 typedef uint32_t htw_ShaderHandle;
+typedef uint32_t htw_ShaderLayoutHandle;
 typedef uint32_t htw_PipelineHandle;
 
 typedef enum htw_BufferUsageType {
@@ -35,6 +39,13 @@ typedef enum htw_DrawFlags {
     HTW_DRAW_TYPE_INDEXED = 3, // triangle indicies; vertex data also needed with indexed draw
     HTW_DRAW_TYPE_INSTANCED = 4 // instance data only
 } htw_DrawFlags;
+
+typedef enum htw_Samplers {
+    HTW_SAMPLER_NONE = 0,
+    HTW_SAMPLER_POINT,
+    HTW_SAMPLER_BILINEAR,
+    HTW_SAMPLER_ENUM_COUNT
+} htw_Samplers;
 
 typedef struct {
     uint32_t size;
@@ -53,6 +64,7 @@ typedef struct {
 } htw_ShaderSet;
 
 typedef struct {
+    uint32_t pushConstantSize;
     uint32_t descriptorSetCount;
     VkDescriptorSetLayout *descriptorSetLayouts;
     VkDescriptorSet *descriptorSets;
@@ -69,14 +81,19 @@ typedef struct {
     VkBuffer buffer;
     size_t hostSize;
     void *hostData;
-    VkMemoryRequirements deviceMemory;
+    VkMemoryRequirements deviceMemoryRequirements;
     VkDeviceSize deviceOffset;
 } htw_Buffer;
 
 typedef struct {
-    VkFormat format;
+    VkImage image;
     VkImageView view;
+    VkSampler sampler;
+    VkImageLayout layout;
+    VkFormat format;
     VkDeviceMemory deviceMemory;
+    uint32_t width;
+    uint32_t height;
 } htw_Texture;
 
 typedef struct {
@@ -96,15 +113,10 @@ typedef struct {
 typedef struct {
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
-    VkFence queueSubmitFence;
-    VkSemaphore swapchainAquireSemaphore;
-    VkSemaphore swapchainReleaseSemaphore;
+    VkFence queueSubmitFence; // copy of an aquiredImageFence
+    VkSemaphore swapchainAquireSemaphore; // copy of an aquiredImageSemaphore
+    VkSemaphore swapchainReleaseSemaphore; // one per SwapchainImageContext
 } htw_SwapchainImageContext;
-
-typedef struct {
-    VkCommandBuffer cmd;
-    uint32_t imageIndex;
-} htw_Frame;
 
 typedef struct {
     SDL_Window *window;
@@ -119,26 +131,39 @@ typedef struct {
     VkDevice device;
     int32_t graphicsQueueIndex;
     VkQueue queue;
-    VkCommandBuffer primaryBuffer;
-    VkFramebuffer *swapchainFramebuffers;
-    VkRenderPass renderPass;
+    VkCommandPool oneTimePool;
+    VkCommandBuffer oneTimeBuffer;
     VkDescriptorPool descriptorPool;
+
     uint32_t shaderCount;
     VkShaderModule *shaders;
+    uint32_t shaderLayoutCount;
+    htw_ShaderLayout *shaderLayouts;
+
     uint32_t pipelineCount;
     htw_Pipeline *pipelines;
+
+    uint32_t bufferCount;
+    htw_Buffer *buffers;
+
+    VkSampler *samplers;
 
     htw_Texture depthBuffer;
 //     VkFormat depthImageFormat;
 //     VkImageView depthImageView;
 //     VkDeviceMemory depthImageMemory;
 
+
+    VkRenderPass renderPass;
+
     VkSwapchainKHR swapchain;
     uint32_t swapchainImageCount;
     VkImageView *swapchainImageViews;
+    VkFramebuffer *swapchainFramebuffers;
     htw_SwapchainImageContext *swapchainImages;
     htw_SwapchainInfo swapchainInfo;
     uint32_t aquiredImageCycleCounter;
+    uint32_t currentImageIndex; // index into swapchainImages
 
     VkSemaphore *aquiredImageSemaphores;
     VkFence *aquiredImageFences;
@@ -146,7 +171,7 @@ typedef struct {
     // device memory offest to address after last created buffer
     VkDeviceSize lastBufferOffset;
     VkDeviceMemory deviceMemory;
-    VkBuffer *uniformBuffers; // because uniforms are updated every frame, need to have as many uniform buffers as swapchain images
+    //VkBuffer *uniformBuffers; // because uniforms are updated every frame, need to have as many uniform buffers as swapchain images
 
 } htw_VkContext;
 
@@ -161,8 +186,10 @@ void htw_logHardwareProperties(htw_VkContext *vkContext);
  */
 htw_ShaderHandle htw_loadShader(htw_VkContext *vkContext, const char *filePath);
 htw_ShaderLayout htw_createStandardShaderLayout (htw_VkContext *vkContext);
+htw_ShaderLayout htw_createTextShaderLayout (htw_VkContext *vkContext);
 htw_ShaderLayout htw_createTerrainShaderLayout (htw_VkContext *vkContext);
 // associate descriptors with buffers. Requires buffers to be bound completely first
+void htw_updateTextDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer uniformBuffer, htw_Texture glyphTexture);
 void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer worldInfo, htw_Buffer terrainData);
 htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo);
 htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size, htw_BufferUsageType bufferType);
@@ -173,14 +200,19 @@ void htw_bindBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffe
 // Upload current buffer contents to the GPU
 void htw_updateBuffer(htw_VkContext *vkContext, htw_Buffer *buffer);
 void htw_updateBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffers);
+htw_Texture htw_createGlyphTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height);
 htw_Texture htw_createMappedTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height);
+// methods between begin and end one-time commands should only be called in between calls to the same
+void htw_beginOneTimeCommands(htw_VkContext *vkContext);
 void htw_updateTexture(htw_VkContext *vkContext, htw_Buffer source, htw_Texture dest);
+void htw_endOneTimeCommands(htw_VkContext *vkContext);
 // NOTE: probably not a good way to do this because the caller could free before render loop is done
 // Consider creating a staging void* with the same capacity, and having the user write to that.
 void htw_mapPipelinePushConstant(htw_VkContext *vkContext, htw_PipelineHandle pipeline, void *pushConstantData);
-htw_Frame htw_beginFrame(htw_VkContext *vkContext);
-void htw_drawPipeline(htw_VkContext *vkContext, htw_Frame frame, htw_PipelineHandle pipelineHandle, htw_ShaderLayout shaderLayout, htw_ModelData modelData, htw_DrawFlags drawFlags);
-void htw_endFrame(htw_VkContext *vkContext, htw_Frame frame);
+// methods between begin and end frame should only be called in between calls to the same
+void htw_beginFrame(htw_VkContext *vkContext);
+void htw_drawPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_ShaderLayout *shaderLayout, htw_ModelData *modelData, htw_DrawFlags drawFlags);
+void htw_endFrame(htw_VkContext *vkContext);
 void htw_resizeWindow(htw_VkContext *vkContext, int width, int height);
 void htw_destroyVkContext(htw_VkContext *vkContext);
 

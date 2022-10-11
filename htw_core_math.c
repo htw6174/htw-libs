@@ -1,8 +1,33 @@
 #include "htw_core.h"
 
-int min_int(int a, int b);
+extern inline int min_int(int a, int b);
 
-int max_int(int a, int b);
+extern inline int max_int(int a, int b);
+
+int htw_align(int value, int alignment) {
+    int aligned = value; // return same size if it fits cleanly
+    int diff = value % alignment;
+    if (diff != 0) {
+        // if there is an uneven remainder, increase to the next multiple of alignment
+        aligned = value + (alignment - diff);
+    }
+    return aligned;
+}
+
+unsigned int htw_nextPow(unsigned int value) {
+    unsigned int onbits = 0;
+    unsigned int highestbit = 0;
+    // check each bit to find the highest 1 bit, and the total number of 1 bits
+    for (int i = 0; i < 32; i++) {
+        unsigned int low = value & 1;
+        onbits += low;
+        if (low) highestbit = i;
+        value = value >> 1;
+    }
+    // increase to next power of 2 if
+    if (onbits > 1) highestbit++;
+    return 1 << highestbit;
+}
 
 int lerp_int(int a, int b, double prog) {
     if (prog > 1) return b;

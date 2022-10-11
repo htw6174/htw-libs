@@ -40,6 +40,7 @@ static inline void htw_printVectorArray(FILE* dest, void* data, unsigned int dim
 #define intToChar(i) (char)i + INT_CHAR_OFFSET
 
 /* Math utilities */
+
 inline int min_int(int a, int b) {
     return a < b ? a : b;
 }
@@ -47,6 +48,12 @@ inline int min_int(int a, int b) {
 inline int max_int(int a, int b) {
     return a > b ? a : b;
 }
+
+// returns the smallest multiple of alignment which is >= value
+int htw_align(int value, int alignment);
+
+// returns the smallest power of 2 which is >= value
+unsigned int htw_nextPow(unsigned int value);
 
 int lerp_int(int a, int b, double prog);
 

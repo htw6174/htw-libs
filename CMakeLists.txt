@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.0)
 
 project(htw LANGUAGES C)
 
-add_compile_definitions($<$<CONFIG:Debug>:DEBUG> $<$<CONFIG:Debug>:VK_DEBUG>)
+# dumb way to control vulkan validation layers: use first line to compile without validations, 2nd line to compile with validations
+add_compile_definitions($<$<CONFIG:Debug>:DEBUG>)
+#add_compile_definitions($<$<CONFIG:Debug>:DEBUG> $<$<CONFIG:Debug>:VK_DEBUG>)
 
 add_library(htw SHARED htw_core_math.c htw_core_collections.c htw_geomap_tiles.c htw_geomap_tilemap.c htw_geomap_valuemap.c htw_geomap_generators.c htw_vulkan.c)
 

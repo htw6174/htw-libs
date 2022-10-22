@@ -484,14 +484,22 @@ htw_ShaderLayout htw_createTextShaderLayout(htw_VkContext *vkContext) {
         .descriptorSets = malloc(sizeof(VkDescriptorSet) * newLayout.descriptorSetCount) // TODO: better allocator
     };
 
-    // define shader uniform layout
-    VkDescriptorSetLayoutBinding uniformBinding = {
+    // display info
+    VkDescriptorSetLayoutBinding displayInfoBinding = {
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = 1,
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
     };
-    // define shader uniform layout
+    // string transforms TODO
+//     VkDescriptorSetLayoutBinding uniformBinding = {
+//         .binding = 0,
+//         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+//         .descriptorCount = 1,
+//         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+//     };
+
+    // glyph texture sampler
     VkDescriptorSetLayoutBinding textureBinding = {
         .binding = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -500,7 +508,7 @@ htw_ShaderLayout htw_createTextShaderLayout(htw_VkContext *vkContext) {
         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
     };
 
-    VkDescriptorSetLayoutBinding layoutBindings[] = {uniformBinding, textureBinding};
+    VkDescriptorSetLayoutBinding layoutBindings[] = {displayInfoBinding, textureBinding};
 
     VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,

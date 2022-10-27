@@ -540,11 +540,12 @@ htw_ShaderLayout htw_createTextShaderLayout(htw_VkContext *vkContext) {
 htw_ShaderLayout htw_createTerrainShaderLayout(htw_VkContext *vkContext) {
     htw_ShaderLayoutHandle nextLayout = vkContext->shaderLayoutCount++;
     htw_ShaderLayout newLayout = {
-        .descriptorSetCount = 1,
+        .descriptorSetCount = 2,
         .descriptorSetLayouts = malloc(sizeof(VkDescriptorSetLayout) * newLayout.descriptorSetCount), // TODO: better allocator
         .descriptorSets = malloc(sizeof(VkDescriptorSet) * newLayout.descriptorSetCount) // TODO: better allocator
     };
 
+    // vertex input bindings, set 0
     VkDescriptorSetLayoutBinding worldInfoBinding = {
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -559,20 +560,45 @@ htw_ShaderLayout htw_createTerrainShaderLayout(htw_VkContext *vkContext) {
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
     };
 
-    VkDescriptorSetLayoutBinding layoutBindings[] = {worldInfoBinding, terrainDataBinding};
+    VkDescriptorSetLayoutBinding setBindings0[] = {worldInfoBinding, terrainDataBinding};
 
-    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo0 = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount = 2,
-        .pBindings = layoutBindings
+        .pBindings = setBindings0
     };
 
-    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, newLayout.descriptorSetLayouts));
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo0, NULL, &newLayout.descriptorSetLayouts[0]));
+
+    // fragment input bindings, set 1
+    VkDescriptorSetLayoutBinding windowInfoBinding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    VkDescriptorSetLayoutBinding viewInfoBinding = {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    VkDescriptorSetLayoutBinding setBindings1[] = {windowInfoBinding, viewInfoBinding};
+
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo1 = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 2,
+        .pBindings = setBindings1
+    };
+
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo1, NULL, &newLayout.descriptorSetLayouts[1]));
 
     VkDescriptorSetAllocateInfo allocateInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = vkContext->descriptorPool,
-        .descriptorSetCount = 1,
+        .descriptorSetCount = 2,
         .pSetLayouts = newLayout.descriptorSetLayouts
     };
     vkAllocateDescriptorSets(vkContext->device, &allocateInfo, newLayout.descriptorSets);
@@ -586,7 +612,7 @@ htw_ShaderLayout htw_createTerrainShaderLayout(htw_VkContext *vkContext) {
 
     VkPipelineLayoutCreateInfo layoutInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
+        .setLayoutCount = 2,
         .pSetLayouts = newLayout.descriptorSetLayouts,
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &pvRange
@@ -630,7 +656,7 @@ void htw_updateTextDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shader
     vkUpdateDescriptorSets(vkContext->device, 2, writeSets, 0, NULL);
 }
 
-void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer worldInfo, htw_Buffer terrainData) {
+void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer worldInfo, htw_Buffer terrainData, htw_Buffer windowInfo, htw_Buffer viewInfo) {
 
     VkDescriptorBufferInfo worldBufferInfo = {
         .buffer = worldInfo.buffer,
@@ -641,6 +667,16 @@ void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout sha
         .buffer = terrainData.buffer,
         .offset = 0,
         .range = terrainData.hostSize
+    };
+    VkDescriptorBufferInfo windowBufferInfo = {
+        .buffer = windowInfo.buffer,
+        .offset = 0,
+        .range = windowInfo.hostSize
+    };
+    VkDescriptorBufferInfo viewBufferInfo = {
+        .buffer = viewInfo.buffer,
+        .offset = 0,
+        .range = viewInfo.hostSize
     };
 
     VkWriteDescriptorSet worldWriteInfo = {
@@ -661,8 +697,26 @@ void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout sha
         .descriptorCount = 1,
         .pBufferInfo = &terrainBufferInfo
     };
-    VkWriteDescriptorSet writeSets[] = {worldWriteInfo, terrainWriteInfo};
-    vkUpdateDescriptorSets(vkContext->device, 2, writeSets, 0, NULL);
+    VkWriteDescriptorSet windowWriteInfo = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = shaderLayout.descriptorSets[1],
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &windowBufferInfo
+    };
+    VkWriteDescriptorSet viewWriteInfo = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = shaderLayout.descriptorSets[1],
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &viewBufferInfo
+    };
+    VkWriteDescriptorSet writeSets[] = {worldWriteInfo, terrainWriteInfo, windowWriteInfo, viewWriteInfo};
+    vkUpdateDescriptorSets(vkContext->device, 4, writeSets, 0, NULL);
 }
 
 htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo) {
@@ -748,6 +802,13 @@ void htw_updateBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buf
     for (int i = 0; i < count; i++) {
         htw_updateBuffer(vkContext, &buffers[i]);
     }
+}
+
+void htw_retreiveBuffer(htw_VkContext *vkContext, htw_Buffer *buffer) {
+    void* dest;
+    vkMapMemory(vkContext->device, vkContext->deviceMemory, buffer->deviceOffset, buffer->deviceMemoryRequirements.size, 0, &dest);
+    memcpy(buffer->hostData, dest, buffer->hostSize);
+    vkUnmapMemory(vkContext->device, vkContext->deviceMemory);
 }
 
 htw_Texture htw_createGlyphTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height) {

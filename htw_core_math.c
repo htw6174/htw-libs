@@ -29,6 +29,10 @@ unsigned int htw_nextPow(unsigned int value) {
     return 1 << highestbit;
 }
 
+float lerp(float a, float b, float progress) {
+    return (a * (1.0 - progress)) + (b * progress);
+}
+
 int lerp_int(int a, int b, double prog) {
     if (prog > 1) return b;
     if (prog < 0) return a;

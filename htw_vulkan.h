@@ -190,7 +190,7 @@ htw_ShaderLayout htw_createTextShaderLayout (htw_VkContext *vkContext);
 htw_ShaderLayout htw_createTerrainShaderLayout (htw_VkContext *vkContext);
 // associate descriptors with buffers. Requires buffers to be bound completely first
 void htw_updateTextDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer uniformBuffer, htw_Texture glyphTexture);
-void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer worldInfo, htw_Buffer terrainData);
+void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer worldInfo, htw_Buffer terrainData, htw_Buffer windowInfo, htw_Buffer viewInfo);
 htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo);
 htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size, htw_BufferUsageType bufferType);
 // Allocate enough GPU memory for all provided buffers, and upload the contents of each
@@ -200,6 +200,8 @@ void htw_bindBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffe
 // Upload current buffer contents to the GPU
 void htw_updateBuffer(htw_VkContext *vkContext, htw_Buffer *buffer);
 void htw_updateBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffers);
+// Pull GPU buffer contents to host accessible memory
+void htw_retreiveBuffer(htw_VkContext *vkContext, htw_Buffer *buffer);
 htw_Texture htw_createGlyphTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height);
 htw_Texture htw_createMappedTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height);
 // methods between begin and end one-time commands should only be called in between calls to the same

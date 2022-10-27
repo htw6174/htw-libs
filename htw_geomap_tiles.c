@@ -30,7 +30,7 @@ void *htw_loadTileDefinitions (char *path) {
     int currentNum = 0;
 
     int nameCursor = 0;
-    char name[TILE_NAME_MAX_LENGTH];
+    char name[HTW_GEO_TILE_NAME_MAX_LENGTH];
 
     char cursor;
     int step = 0;
@@ -94,8 +94,8 @@ void *htw_loadTileDefinitions (char *path) {
     return malloc(1);
 }
 
-MapTile *htw_createTile (int id) {
-    MapTile *c = malloc(sizeof( MapTile ));
+htw_geo_MapTile *htw_createTile (int id) {
+    htw_geo_MapTile *c = malloc(sizeof(htw_geo_MapTile));
     c->id = id;
     c->content = 0;
     return c;

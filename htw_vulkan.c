@@ -37,7 +37,7 @@ static uint32_t getBestMemoryTypeIndex(htw_VkContext *vkContext, uint32_t memory
 size_t getAlignedBufferSize (htw_VkContext* vkContext, size_t size, VkDeviceSize alignment);
 
 static VkShaderModule loadShaderModule(htw_VkContext *vkContext, const char *filePath);
-static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo);
+static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_DescriptorSetLayout *layouts, htw_ShaderSet shaderInfo);
 static htw_Texture createImage(htw_VkContext* vkContext, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlagBits usage, VkImageAspectFlagBits aspectFlags, htw_Samplers sampler);
 static VkSampler createSampler(htw_VkContext *vkContext);
 
@@ -168,12 +168,12 @@ htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow) {
     // TODO: make an actual dynamic shader+pipeline library
     context->shaderCount = 0;
     context->shaders = malloc(sizeof(VkShaderModule) * HTW_VK_MAX_SHADERS);
-    context->shaderLayoutCount = 0;
-    context->shaderLayouts = malloc(sizeof(htw_ShaderLayout) * HTW_VK_MAX_SHADERS);
     context->pipelineCount = 0;
     context->pipelines = malloc(sizeof(htw_Pipeline) * HTW_VK_MAX_PIPELINES);
     context->bufferCount = 0;
     context->buffers = malloc(sizeof(htw_Buffer) * HTW_VK_MAX_BUFFERS);
+
+    context->defaultSetLayout = htw_createEmptySetLayout(context);
 
     context->lastBufferOffset = 0;
 
@@ -275,8 +275,7 @@ void htw_beginFrame(htw_VkContext *vkContext) {
     vkContext->currentImageIndex = imageIndex;
 }
 
-void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHandle, htw_ShaderLayout *shaderLayout, htw_ModelData *modelData, htw_DrawFlags drawFlags)
-{
+void htw_bindPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle) {
     // bind the graphics pipeline
     htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
     VkCommandBuffer cmd = vkContext->swapchainImages[vkContext->currentImageIndex].commandBuffer;
@@ -296,15 +295,27 @@ void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHand
         .extent.height = vkContext->height
     };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
+}
+
+void htw_bindDescriptorSet(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_DescriptorSet descriptorSet, htw_DescriptorBindingFrequency bindFrequency) {
+    htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
+    VkCommandBuffer cmd = vkContext->swapchainImages[vkContext->currentImageIndex].commandBuffer;
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, currentPipeline.pipelineLayout, bindFrequency, 1, &descriptorSet, 0, NULL);
+}
+
+void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHandle, htw_ModelData *modelData, htw_DrawFlags drawFlags)
+{
+    htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
+    VkCommandBuffer cmd = vkContext->swapchainImages[vkContext->currentImageIndex].commandBuffer;
+
+    // push constants
+    if (currentPipeline.pushConstantSize > 0) {
+        vkCmdPushConstants(cmd, currentPipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, currentPipeline.pushConstantSize, currentPipeline.pushConstantData);
+    }
 
     // draw vertices
-    if (shaderLayout != NULL) vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shaderLayout->pipelineLayout, 0, shaderLayout->descriptorSetCount, shaderLayout->descriptorSets, 0, NULL);
     VkDeviceSize offsets[] = {0};
     uint32_t instanceCount = 1;
-    // push constants
-    if (shaderLayout->pushConstantSize > 0)
-        vkCmdPushConstants(cmd, currentPipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, shaderLayout->pushConstantSize, currentPipeline.pushConstantData);
-
     if ((drawFlags & HTW_DRAW_TYPE_POINTS) == HTW_DRAW_TYPE_POINTS) {
         vkCmdBindVertexBuffers(cmd, 0, 1, &modelData->vertexBuffer->buffer, offsets);
     }
@@ -362,15 +373,8 @@ void htw_destroyVkContext(htw_VkContext* vkContext) {
     }
     free(vkContext->pipelines);
 
-    for (int i = 0; i < vkContext->shaderLayoutCount; i++) {
-        htw_ShaderLayout layout = vkContext->shaderLayouts[i];
-        for (int s = 0; s < layout.descriptorSetCount; s++) {
-            vkDestroyDescriptorSetLayout(vkContext->device, layout.descriptorSetLayouts[s], NULL);
-        }
-        free(layout.descriptorSetLayouts);
-        free(layout.descriptorSets);
-    }
-    free(vkContext->shaderLayouts);
+    // TODO: keep track of created descriptor sets so they can be freed here
+    //vkDestroyDescriptorSetLayout(vkContext->device, layout.descriptorSetLayouts[s], NULL);
 
     for (int i = 0; i < vkContext->shaderCount; i++) {
         vkDestroyShaderModule(vkContext->device, vkContext->shaders[i], NULL);
@@ -433,57 +437,79 @@ htw_ShaderHandle htw_loadShader(htw_VkContext *vkContext, const char *filePath) 
     return nextHandle;
 }
 
-htw_ShaderLayout htw_createStandardShaderLayout(htw_VkContext *vkContext) {
-    htw_ShaderLayoutHandle nextLayout = vkContext->shaderLayoutCount++;
-    htw_ShaderLayout newLayout = {
-        .descriptorSetCount = 1,
-        .descriptorSetLayouts = malloc(sizeof(VkDescriptorSetLayout) * newLayout.descriptorSetCount), // TODO: better allocator
-        .descriptorSets = malloc(sizeof(VkDescriptorSet) * newLayout.descriptorSetCount) // TODO: better allocator
-    };
-
-    // define shader uniform layout
-    VkDescriptorSetLayoutBinding layoutBinding = {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 2,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-    };
-
-    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {
+htw_DescriptorSetLayout htw_createEmptySetLayout(htw_VkContext *vkContext) {
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo0 = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &layoutBinding
+        .bindingCount = 0,
+        .pBindings = NULL
     };
 
-    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, newLayout.descriptorSetLayouts));
-
-    VkPushConstantRange pvRange = {
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        .offset = 0,
-        .size = 128
-    };
-
-    VkPipelineLayoutCreateInfo layoutInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = newLayout.descriptorSetLayouts,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pvRange
-    };
-    VK_CHECK(vkCreatePipelineLayout(vkContext->device, &layoutInfo, NULL, &newLayout.pipelineLayout));
-    vkContext->shaderLayouts[nextLayout] = newLayout;
+    VkDescriptorSetLayout newLayout;
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo0, NULL, &newLayout));
     return newLayout;
 }
 
-htw_ShaderLayout htw_createTextShaderLayout(htw_VkContext *vkContext) {
-    htw_ShaderLayoutHandle nextLayout = vkContext->shaderLayoutCount++;
-    htw_ShaderLayout newLayout = {
-        .pushConstantSize = 0,
-        .descriptorSetCount = 1,
-        .descriptorSetLayouts = malloc(sizeof(VkDescriptorSetLayout) * newLayout.descriptorSetCount), // TODO: better allocator
-        .descriptorSets = malloc(sizeof(VkDescriptorSet) * newLayout.descriptorSetCount) // TODO: better allocator
+htw_DescriptorSetLayout htw_createPerFrameSetLayout(htw_VkContext *vkContext) {
+    VkDescriptorSetLayoutBinding windowInfoBinding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+    VkDescriptorSetLayoutBinding viewInfoBinding = {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+    VkDescriptorSetLayoutBinding worldInfoBinding = {
+        .binding = 2,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
     };
 
+    VkDescriptorSetLayoutBinding setBindings[] = {windowInfoBinding, viewInfoBinding, worldInfoBinding};
+
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 3,
+        .pBindings = setBindings
+    };
+
+    VkDescriptorSetLayout newLayout;
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, &newLayout));
+    return newLayout;
+}
+
+// TODO
+htw_DescriptorSetLayout htw_createPerPassSetLayout(htw_VkContext *vkContext) {
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo0 = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 0,
+        .pBindings = NULL
+    };
+
+    VkDescriptorSetLayout newLayout;
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo0, NULL, &newLayout));
+    return newLayout;
+}
+
+// TODO
+htw_DescriptorSetLayout htw_createPerPipelineSetLayout(htw_VkContext *vkContext) {
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo0 = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 0,
+        .pBindings = NULL
+    };
+
+    VkDescriptorSetLayout newLayout;
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo0, NULL, &newLayout));
+    return newLayout;
+
+}
+
+htw_DescriptorSetLayout htw_createTextPipelineSetLayout(htw_VkContext *vkContext) {
     // display info
     VkDescriptorSetLayoutBinding displayInfoBinding = {
         .binding = 0,
@@ -516,113 +542,123 @@ htw_ShaderLayout htw_createTextShaderLayout(htw_VkContext *vkContext) {
         .pBindings = layoutBindings
     };
 
-    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, newLayout.descriptorSetLayouts));
+    VkDescriptorSetLayout newLayout;
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, &newLayout));
+    return newLayout;
+}
 
+// TODO
+htw_DescriptorSetLayout htw_createPerObjectSetLayout(htw_VkContext *vkContext) {
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo0 = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 0,
+        .pBindings = NULL
+    };
+
+    VkDescriptorSetLayout newLayout;
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo0, NULL, &newLayout));
+    return newLayout;
+
+}
+
+htw_DescriptorSetLayout htw_createTerrainObjectSetLayout(htw_VkContext *vkContext) {
+    VkDescriptorSetLayoutBinding terrainDataBinding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &terrainDataBinding
+    };
+
+    VkDescriptorSetLayout newLayout;
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo, NULL, &newLayout));
+    return newLayout;
+}
+
+htw_DescriptorSet htw_allocateDescriptor(htw_VkContext *vkContext, htw_DescriptorSetLayout layout) {
     VkDescriptorSetAllocateInfo allocateInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = vkContext->descriptorPool,
         .descriptorSetCount = 1,
-        .pSetLayouts = newLayout.descriptorSetLayouts
+        .pSetLayouts = &layout
     };
-    vkAllocateDescriptorSets(vkContext->device, &allocateInfo, newLayout.descriptorSets);
-
-    VkPipelineLayoutCreateInfo layoutInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = newLayout.descriptorSetLayouts,
-        .pushConstantRangeCount = 0,
-    };
-    VK_CHECK(vkCreatePipelineLayout(vkContext->device, &layoutInfo, NULL, &newLayout.pipelineLayout));
-    vkContext->shaderLayouts[nextLayout] = newLayout;
-    return newLayout;
+    VkDescriptorSet newSet;
+    vkAllocateDescriptorSets(vkContext->device, &allocateInfo, &newSet);
+    return newSet;
 }
 
-htw_ShaderLayout htw_createTerrainShaderLayout(htw_VkContext *vkContext) {
-    htw_ShaderLayoutHandle nextLayout = vkContext->shaderLayoutCount++;
-    htw_ShaderLayout newLayout = {
-        .descriptorSetCount = 2,
-        .descriptorSetLayouts = malloc(sizeof(VkDescriptorSetLayout) * newLayout.descriptorSetCount), // TODO: better allocator
-        .descriptorSets = malloc(sizeof(VkDescriptorSet) * newLayout.descriptorSetCount) // TODO: better allocator
-    };
-
-    // vertex input bindings, set 0
-    VkDescriptorSetLayoutBinding worldInfoBinding = {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-    };
-
-    VkDescriptorSetLayoutBinding terrainDataBinding = {
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-    };
-
-    VkDescriptorSetLayoutBinding setBindings0[] = {worldInfoBinding, terrainDataBinding};
-
-    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo0 = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 2,
-        .pBindings = setBindings0
-    };
-
-    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo0, NULL, &newLayout.descriptorSetLayouts[0]));
-
-    // fragment input bindings, set 1
-    VkDescriptorSetLayoutBinding windowInfoBinding = {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutBinding viewInfoBinding = {
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutBinding setBindings1[] = {windowInfoBinding, viewInfoBinding};
-
-    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo1 = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 2,
-        .pBindings = setBindings1
-    };
-
-    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->device, &descriptorLayoutInfo1, NULL, &newLayout.descriptorSetLayouts[1]));
-
+void htw_allocateDescriptors(htw_VkContext *vkContext, htw_DescriptorSetLayout layout, u32 count, htw_DescriptorSet *descriptorSets) {
+    // TODO: use temporary allocator
+    VkDescriptorSetLayout *layoutArray = malloc(sizeof(VkDescriptorSetLayout) * count);
+    for (int i = 0; i < count; i++) {
+        layoutArray[i] = layout;
+    }
     VkDescriptorSetAllocateInfo allocateInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = vkContext->descriptorPool,
-        .descriptorSetCount = 2,
-        .pSetLayouts = newLayout.descriptorSetLayouts
+        .descriptorSetCount = count,
+        .pSetLayouts = layoutArray
     };
-    vkAllocateDescriptorSets(vkContext->device, &allocateInfo, newLayout.descriptorSets);
-
-    VkPushConstantRange pvRange = {
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        .offset = 0,
-        .size = 128
-    };
-    newLayout.pushConstantSize = pvRange.size;
-
-    VkPipelineLayoutCreateInfo layoutInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 2,
-        .pSetLayouts = newLayout.descriptorSetLayouts,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pvRange
-    };
-    VK_CHECK(vkCreatePipelineLayout(vkContext->device, &layoutInfo, NULL, &newLayout.pipelineLayout));
-    vkContext->shaderLayouts[nextLayout] = newLayout;
-    return newLayout;
+    vkAllocateDescriptorSets(vkContext->device, &allocateInfo, (VkDescriptorSet*)descriptorSets);
+    free(layoutArray);
 }
 
-void htw_updateTextDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer uniformBuffer, htw_Texture glyphTexture) {
+void htw_updatePerFrameDescriptor(htw_VkContext *vkContext, htw_DescriptorSet frameDescriptor, htw_Buffer windowInfo, htw_Buffer feedbackInfo, htw_Buffer worldInfo) {
+    VkDescriptorBufferInfo windowBufferInfo = {
+        .buffer = windowInfo.buffer,
+        .offset = 0,
+        .range = windowInfo.hostSize
+    };
+    VkDescriptorBufferInfo feedbackBufferInfo = {
+        .buffer = feedbackInfo.buffer,
+        .offset = 0,
+        .range = feedbackInfo.hostSize
+    };
+    VkDescriptorBufferInfo worldBufferInfo = {
+        .buffer = worldInfo.buffer,
+        .offset = 0,
+        .range = worldInfo.hostSize
+    };
+
+    VkWriteDescriptorSet windowWriteInfo = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frameDescriptor,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &windowBufferInfo
+    };
+    VkWriteDescriptorSet feedbackWriteInfo = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frameDescriptor,
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &feedbackBufferInfo
+    };
+    VkWriteDescriptorSet worldWriteInfo = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frameDescriptor,
+        .dstBinding = 2,
+        .dstArrayElement = 0, // used only for descriptor arrays
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &worldBufferInfo
+    };
+    VkWriteDescriptorSet writeSets[] = {windowWriteInfo, feedbackWriteInfo, worldWriteInfo};
+    vkUpdateDescriptorSets(vkContext->device, 3, writeSets, 0, NULL);
+}
+
+void htw_updatePerPassDescriptor(htw_VkContext *vkContext, htw_DescriptorSet passDescriptor); // TODO/UNUSED
+
+void htw_updateTextDescriptor(htw_VkContext *vkContext, htw_DescriptorSet pipelineDescriptor, htw_Buffer uniformBuffer, htw_Texture glyphTexture) {
     VkDescriptorBufferInfo uniformBufferInfo = {
         .buffer = uniformBuffer.buffer,
         .offset = 0,
@@ -636,7 +672,7 @@ void htw_updateTextDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shader
 
     VkWriteDescriptorSet uniformWriteInfo = {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = shaderLayout.descriptorSets[0],
+        .dstSet = pipelineDescriptor,
         .dstBinding = 0,
         .dstArrayElement = 0, // used only for descriptor arrays
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -645,7 +681,7 @@ void htw_updateTextDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shader
     };
     VkWriteDescriptorSet bitmapWriteInfo = {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = shaderLayout.descriptorSets[0],
+        .dstSet = pipelineDescriptor,
         .dstBinding = 1,
         .dstArrayElement = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -656,72 +692,38 @@ void htw_updateTextDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shader
     vkUpdateDescriptorSets(vkContext->device, 2, writeSets, 0, NULL);
 }
 
-void htw_updateTerrainDescriptors(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_Buffer worldInfo, htw_Buffer terrainData, htw_Buffer windowInfo, htw_Buffer viewInfo) {
+void htw_updateTerrainPipelineDescriptor(htw_VkContext *vkContext, htw_DescriptorSet pipelineDescriptor); // TODO/UNUSED
 
-    VkDescriptorBufferInfo worldBufferInfo = {
-        .buffer = worldInfo.buffer,
-        .offset = 0,
-        .range = worldInfo.hostSize
-    };
-    VkDescriptorBufferInfo terrainBufferInfo = {
-        .buffer = terrainData.buffer,
-        .offset = 0,
-        .range = terrainData.hostSize
-    };
-    VkDescriptorBufferInfo windowBufferInfo = {
-        .buffer = windowInfo.buffer,
-        .offset = 0,
-        .range = windowInfo.hostSize
-    };
-    VkDescriptorBufferInfo viewBufferInfo = {
-        .buffer = viewInfo.buffer,
-        .offset = 0,
-        .range = viewInfo.hostSize
-    };
+void htw_updateTerrainObjectDescriptors(htw_VkContext *vkContext, htw_DescriptorSet* objectDescriptors, u32 subBufferCount, size_t subBufferDeviceSize, htw_Buffer terrainData) {
+    VkDescriptorBufferInfo *chunkBufferInfos = malloc(sizeof(VkDescriptorBufferInfo) * subBufferCount);
+    VkWriteDescriptorSet *writeSetInfos = malloc(sizeof(VkWriteDescriptorSet) * subBufferCount);
+    for (int i = 0; i < subBufferCount; i++) {
+        VkDescriptorBufferInfo chunkBufferInfo = {
+            .buffer = terrainData.buffer,
+            .offset = i * subBufferDeviceSize,
+            .range = subBufferDeviceSize
+        };
+        chunkBufferInfos[i] = chunkBufferInfo;
 
-    VkWriteDescriptorSet worldWriteInfo = {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = shaderLayout.descriptorSets[0],
-        .dstBinding = 0,
-        .dstArrayElement = 0, // used only for descriptor arrays
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .pBufferInfo = &worldBufferInfo
-    };
-    VkWriteDescriptorSet terrainWriteInfo = {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = shaderLayout.descriptorSets[0],
-        .dstBinding = 1,
-        .dstArrayElement = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .descriptorCount = 1,
-        .pBufferInfo = &terrainBufferInfo
-    };
-    VkWriteDescriptorSet windowWriteInfo = {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = shaderLayout.descriptorSets[1],
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .pBufferInfo = &windowBufferInfo
-    };
-    VkWriteDescriptorSet viewWriteInfo = {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = shaderLayout.descriptorSets[1],
-        .dstBinding = 1,
-        .dstArrayElement = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .descriptorCount = 1,
-        .pBufferInfo = &viewBufferInfo
-    };
-    VkWriteDescriptorSet writeSets[] = {worldWriteInfo, terrainWriteInfo, windowWriteInfo, viewWriteInfo};
-    vkUpdateDescriptorSets(vkContext->device, 4, writeSets, 0, NULL);
+        VkWriteDescriptorSet chunkWriteInfo = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = objectDescriptors[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+            .pBufferInfo = &chunkBufferInfos[i] // NB: when using a struct created in a loop, remember that the struct will be overwritten on the next iteration
+        };
+        writeSetInfos[i] = chunkWriteInfo;
+    }
+    vkUpdateDescriptorSets(vkContext->device, subBufferCount, writeSetInfos, 0, NULL);
+    free(chunkBufferInfos);
+    free(writeSetInfos);
 }
 
-htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo) {
+htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_DescriptorSetLayout *layouts, htw_ShaderSet shaderInfo) {
     htw_PipelineHandle nextHandle = vkContext->pipelineCount++;
-    vkContext->pipelines[nextHandle] = createPipeline(vkContext, shaderLayout, shaderInfo);
+    vkContext->pipelines[nextHandle] = createPipeline(vkContext, layouts, shaderInfo);
     return nextHandle;
 }
 
@@ -745,9 +747,43 @@ htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size, htw_BufferUsa
     size_t alignedSize = getAlignedBufferSize(vkContext, size, newBuffer.deviceMemoryRequirements.alignment);
     // set memory offset and move tracker forward
     newBuffer.deviceMemoryRequirements.size = alignedSize;
-    newBuffer.deviceOffset = vkContext->lastBufferOffset;
+    //newBuffer.deviceOffset = vkContext->lastBufferOffset;
+    newBuffer.deviceOffset = getAlignedBufferSize(vkContext, vkContext->lastBufferOffset, newBuffer.deviceMemoryRequirements.alignment);
     //printf("created buffer %i type = %i, size = %lu, offset = %lu\n", nextBuffer, bufferType, alignedSize, newBuffer.deviceOffset);
     vkContext->lastBufferOffset += alignedSize; // TODO: need to do anything else to ensure that the start of the next buffer created is aligned correctly?
+    vkContext->buffers[nextBuffer] = newBuffer;
+
+    return newBuffer;
+}
+
+htw_Buffer htw_createSplitBuffer(htw_VkContext *vkContext, size_t subBufferSize, u32 subBufferCount, htw_BufferUsageType bufferType, size_t *subBufferDeviceSize) {
+    uint32_t nextBuffer = vkContext->bufferCount++;
+    htw_Buffer newBuffer;
+    // create vkBuffer
+    size_t hostSize = subBufferSize * subBufferCount;
+    VkBufferCreateInfo bufferInfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = hostSize,
+        .usage = bufferType,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+    };
+    vkCreateBuffer(vkContext->device, &bufferInfo, NULL, &newBuffer.buffer);
+    newBuffer.hostSize = hostSize;
+    newBuffer.hostData = malloc(hostSize);
+    // get device memory requirements
+    vkGetBufferMemoryRequirements(vkContext->device, newBuffer.buffer, &newBuffer.deviceMemoryRequirements);
+    if (newBuffer.deviceMemoryRequirements.memoryTypeBits == 0)
+        fprintf(stderr, "No suitable memory type for buffer of size %lu, type %i\n", hostSize, bufferType);
+    // ensure that each sub buffer meets device alignment requirements
+    size_t alignedSubBufferSize = getAlignedBufferSize(vkContext, subBufferSize, newBuffer.deviceMemoryRequirements.alignment);
+    size_t totalDeviceSize = alignedSubBufferSize * subBufferCount;
+    *subBufferDeviceSize = alignedSubBufferSize;
+    // set memory offset and move tracker forward
+    newBuffer.deviceMemoryRequirements.size = totalDeviceSize;
+    //newBuffer.deviceOffset = vkContext->lastBufferOffset;
+    newBuffer.deviceOffset = getAlignedBufferSize(vkContext, vkContext->lastBufferOffset, newBuffer.deviceMemoryRequirements.alignment);
+    //printf("created buffer %i type = %i, size = %lu, offset = %lu\n", nextBuffer, bufferType, alignedSize, newBuffer.deviceOffset);
+    vkContext->lastBufferOffset += totalDeviceSize;
     vkContext->buffers[nextBuffer] = newBuffer;
 
     return newBuffer;
@@ -795,6 +831,14 @@ void htw_updateBuffer(htw_VkContext *vkContext, htw_Buffer *buffer) {
     void* dest;
     vkMapMemory(vkContext->device, vkContext->deviceMemory, buffer->deviceOffset, buffer->deviceMemoryRequirements.size, 0, &dest);
     memcpy(dest, buffer->hostData, buffer->hostSize);
+    vkUnmapMemory(vkContext->device, vkContext->deviceMemory);
+}
+
+// TODO: might make sense to create an expanded buffer type for split buffers, that can include details on host+device sub buffer sizes and counts
+void htw_updateSubBuffer(htw_VkContext *vkContext, htw_Buffer *buffer, size_t hostOffset, size_t deviceOffset, size_t range) {
+    void* dest;
+    vkMapMemory(vkContext->device, vkContext->deviceMemory, buffer->deviceOffset + deviceOffset, range, 0, &dest);
+    memcpy(dest, buffer->hostData + hostOffset, range);
     vkUnmapMemory(vkContext->device, vkContext->deviceMemory);
 }
 
@@ -949,9 +993,32 @@ static VkShaderModule loadShaderModule(htw_VkContext *vkContext, const char *fil
     return shaderModule;
 }
 
-static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_ShaderLayout shaderLayout, htw_ShaderSet shaderInfo) {
+// TODO: include options for setting push constant ranges
+static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_DescriptorSetLayout *layouts, htw_ShaderSet shaderInfo) {
     htw_Pipeline newPipeline;
-    newPipeline.pipelineLayout = shaderLayout.pipelineLayout;
+
+    VkPushConstantRange pvRange = {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = 128
+    };
+    newPipeline.pushConstantSize = pvRange.size;
+
+    // if a descriptor set layout is NULL, replace it with a valid empty layout
+    for (int i = 0; i < 4; i++) {
+        if (layouts[i] == NULL) {
+            layouts[i] = vkContext->defaultSetLayout;
+        }
+    }
+
+    VkPipelineLayoutCreateInfo layoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 4,
+        .pSetLayouts = layouts,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pvRange
+    };
+    VK_CHECK(vkCreatePipelineLayout(vkContext->device, &layoutInfo, NULL, &newPipeline.pipelineLayout));
 
     // bind vertex shader inputs
     // FIXME/TODO: this will not work for shaders that use both vertex and instance buffers
@@ -1286,6 +1353,7 @@ void initDevice(htw_VkContext *vkContext) {
 
     VkPhysicalDeviceFeatures requiredFeatures = {
         .samplerAnisotropy = VK_TRUE,
+        .fragmentStoresAndAtomics = VK_TRUE,
     };
 
     // TODO: use required features to find the best physical device to use / check compatability

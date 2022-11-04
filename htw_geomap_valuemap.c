@@ -17,7 +17,7 @@ s32 htw_geo_getMapValue(htw_ValueMap *map, u32 x, u32 y) {
 
 void htw_geo_setMapValue(htw_ValueMap *map, s32 value, u32 x, u32 y) {
     if (x >= map->width || y >= map->height) {
-        fprintf(stderr, "coordinates outside map range: %u, %u", x, y);
+        fprintf(stderr, "coordinates outside map range: %u, %u\n", x, y);
         return;
     }
     map->values[(y * map->width) + x] = value;

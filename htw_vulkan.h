@@ -240,11 +240,13 @@ void htw_updateTexture(htw_VkContext *vkContext, htw_Buffer source, htw_Texture 
 void htw_endOneTimeCommands(htw_VkContext *vkContext);
 // NOTE: probably not a good way to do this because the caller could free before render loop is done
 // Consider creating a staging void* with the same capacity, and having the user write to that.
+// TODO: is this still needed?
 void htw_mapPipelinePushConstant(htw_VkContext *vkContext, htw_PipelineHandle pipeline, void *pushConstantData);
 // methods between begin and end frame should only be called in between calls to the same
 void htw_beginFrame(htw_VkContext *vkContext);
 void htw_bindPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle);
 void htw_bindDescriptorSet(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_DescriptorSet descriptorSet, htw_DescriptorBindingFrequency bindFrequency);
+void htw_pushConstants(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, void *pushConstantData);
 void htw_drawPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_ModelData *modelData, htw_DrawFlags drawFlags);
 void htw_endFrame(htw_VkContext *vkContext);
 void htw_resizeWindow(htw_VkContext *vkContext, int width, int height);

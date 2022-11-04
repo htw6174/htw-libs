@@ -11,7 +11,7 @@ typedef enum LayoutTransitionType {
     HTW_LAYOUT_TRANSITION_COPY_TO_FRAGMENT,
 } LayoutTransitionType;
 
-typedef struct LayoutTransitionMaskSet {
+typedef struct {
     VkAccessFlags srcAccessMask;
     VkAccessFlags dstAccessMask;
     VkPipelineStageFlags srcStageMask;
@@ -303,15 +303,25 @@ void htw_bindDescriptorSet(htw_VkContext *vkContext, htw_PipelineHandle pipeline
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, currentPipeline.pipelineLayout, bindFrequency, 1, &descriptorSet, 0, NULL);
 }
 
+void htw_pushConstants(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, void *pushConstantData) {
+    htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
+    VkCommandBuffer cmd = vkContext->swapchainImages[vkContext->currentImageIndex].commandBuffer;
+
+    // push constants
+    if (currentPipeline.pushConstantSize > 0) {
+        vkCmdPushConstants(cmd, currentPipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, currentPipeline.pushConstantSize, pushConstantData);
+    }
+};
+
 void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHandle, htw_ModelData *modelData, htw_DrawFlags drawFlags)
 {
     htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
     VkCommandBuffer cmd = vkContext->swapchainImages[vkContext->currentImageIndex].commandBuffer;
 
     // push constants
-    if (currentPipeline.pushConstantSize > 0) {
-        vkCmdPushConstants(cmd, currentPipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, currentPipeline.pushConstantSize, currentPipeline.pushConstantData);
-    }
+    // if (currentPipeline.pushConstantSize > 0) {
+    //     vkCmdPushConstants(cmd, currentPipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, currentPipeline.pushConstantSize, currentPipeline.pushConstantData);
+    // }
 
     // draw vertices
     VkDeviceSize offsets[] = {0};
@@ -454,7 +464,7 @@ htw_DescriptorSetLayout htw_createPerFrameSetLayout(htw_VkContext *vkContext) {
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
     };
     VkDescriptorSetLayoutBinding viewInfoBinding = {
         .binding = 1,
@@ -466,7 +476,7 @@ htw_DescriptorSetLayout htw_createPerFrameSetLayout(htw_VkContext *vkContext) {
         .binding = 2,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
     };
 
     VkDescriptorSetLayoutBinding setBindings[] = {windowInfoBinding, viewInfoBinding, worldInfoBinding};
@@ -1353,7 +1363,7 @@ void initDevice(htw_VkContext *vkContext) {
 
     VkPhysicalDeviceFeatures requiredFeatures = {
         .samplerAnisotropy = VK_TRUE,
-        .fragmentStoresAndAtomics = VK_TRUE,
+        .fragmentStoresAndAtomics = VK_TRUE, // Required for writing to storage buffers in fragment shaders, used here for finding mouse overlap with objects
     };
 
     // TODO: use required features to find the best physical device to use / check compatability

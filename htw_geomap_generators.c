@@ -38,11 +38,11 @@ void htw_geo_fillSmoothNoise(htw_ValueMap* map, u32 seed, float scale) {
     }
 }
 
-void htw_geo_fillPerlin(htw_ValueMap* map, u32 seed, u32 octaves, float scale) {
+void htw_geo_fillPerlin(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32 posY, float scale) {
     for (u32 y = 0; y < map->height; y++) {
         for (u32 x = 0; x < map->width; x++) {
             float scaledX, scaledY;
-            htw_geo_getHexCellPositionSkewed(x, y, &scaledX, &scaledY);
+            htw_geo_getHexCellPositionSkewed(x + posX, y + posY, &scaledX, &scaledY);
             scaledX *= scale;
             scaledY *= scale;
             float val = htw_perlin2d(seed, scaledX, scaledY, octaves);

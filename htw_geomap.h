@@ -6,7 +6,7 @@
 
 #define HTW_GEO_TILE_NAME_MAX_LENGTH 256
 
-typedef struct htw_geo_MapTile {
+typedef struct {
     int id;
     void *content;
 } htw_geo_MapTile;
@@ -78,6 +78,6 @@ void htw_geo_fillNoise(htw_ValueMap* map, u32 seed);
 
 void htw_geo_fillSmoothNoise(htw_ValueMap* map, u32 seed, float scale);
 
-void htw_geo_fillPerlin(htw_ValueMap* map, u32 seed, u32 octaves, float scale);
+void htw_geo_fillPerlin(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32 posY, float scale);
 
 #endif

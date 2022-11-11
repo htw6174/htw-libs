@@ -7,7 +7,7 @@
 #include <math.h>
 #include "htw_core.h"
 
-extern int htw_randRange(int range);
+//extern int htw_randRange(int range);
 
 /* Basics */
 /**
@@ -16,7 +16,7 @@ extern int htw_randRange(int range);
  * @param range number of possible results; also equal to max result + 1
  * @return int
  */
-inline int htw_randRange(int range) {
+static inline int htw_randRange(int range) {
     return rand() % range;
 }
 
@@ -28,7 +28,7 @@ inline int htw_randRange(int range) {
  * @param results NULL or a pointer to an array of at least [count] elements, to record the result of each roll
  * @return sum of all rolls
  */
-int htw_rtd(int count, int sides, int *results) {
+static int htw_rtd(int count, int sides, int *results) {
     int total = 0;
     if (results == NULL) {
         for (int i = 0; i < count; i++) {
@@ -92,11 +92,11 @@ int htw_rtd(int count, int sides, int *results) {
 #define XXH_PRIME32_4  0x27D4EB2FU  /*!< 0b00100111110101001110101100101111 */
 #define XXH_PRIME32_5  0x165667B1U  /*!< 0b00010110010101100110011110110001 */
 
-u32 xxh_rotateLeft(u32 value, s32 count) {
+static u32 xxh_rotateLeft(u32 value, s32 count) {
     return (value << count) | (value >> (32 - count));
 }
 
-u32 xxh_hash2d(u32 seed, u32 x, u32 y) {
+static u32 xxh_hash2d(u32 seed, u32 x, u32 y) {
     u32 hash = seed + XXH_PRIME32_5;
     hash += 2 * 4; // equivalent to adding input bytecount in the original. Unsure if it's needed here
     // unrolled loop for fixed length input
@@ -119,7 +119,7 @@ u32 xxh_hash2d(u32 seed, u32 x, u32 y) {
 /* 2D Noise */
 
 // Value noise
-float htw_value2d(u32 seed, float sampleX, float sampleY) {
+static float htw_value2d(u32 seed, float sampleX, float sampleY) {
     float integralX, integralY;
     float fractX = modff(sampleX, &integralX);
     float fractY = modff(sampleY, &integralY);
@@ -139,7 +139,7 @@ float htw_value2d(u32 seed, float sampleX, float sampleY) {
 }
 
 // Perlin noise
-float htw_perlin2d(u32 seed, float sampleX, float sampleY, u32 octaves) {
+static float htw_perlin2d(u32 seed, float sampleX, float sampleY, u32 octaves) {
     u32 numerator = pow(2, octaves - 1); // used to weight each octave by half the previous octave, halves each iteration
     u32 denominator = pow(2, octaves) - 1;
     float value = 0.0;

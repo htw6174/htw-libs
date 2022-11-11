@@ -11,16 +11,24 @@ htw_ValueMap *htw_geo_createValueMap(u32 width, u32 height, s32 maxValue) {
     return newMap;
 }
 
-s32 htw_geo_getMapValue(htw_ValueMap *map, u32 x, u32 y) {
-    return map->values[(y * map->width) + x];
+s32 htw_geo_getMapValueByIndex(htw_ValueMap *map, u32 cellIndex) {
+    return map->values[cellIndex];
 }
 
-void htw_geo_setMapValue(htw_ValueMap *map, s32 value, u32 x, u32 y) {
-    if (x >= map->width || y >= map->height) {
-        fprintf(stderr, "coordinates outside map range: %u, %u\n", x, y);
+s32 htw_geo_getMapValue(htw_ValueMap *map, htw_geo_GridCoord cellCoord) {
+    return map->values[htw_geo_cellCoordToIndex(cellCoord, map->width)];
+}
+
+void htw_geo_setMapValueByIndex(htw_ValueMap *map, u32 cellIndex, s32 value) {
+    map->values[cellIndex] = value;
+}
+
+void htw_geo_setMapValue(htw_ValueMap *map, htw_geo_GridCoord cellCoord, s32 value) {
+    if (cellCoord.x >= map->width || cellCoord.y >= map->height) {
+        fprintf(stderr, "coordinates outside map range: %u, %u\n", cellCoord.x, cellCoord.y);
         return;
     }
-    map->values[(y * map->width) + x] = value;
+    map->values[htw_geo_cellCoordToIndex(cellCoord, map->width)] = value;
 }
 
 void printValueMap ( htw_ValueMap *map) {

@@ -33,20 +33,3 @@ void printTileMap ( htw_TileMap *map) {
         printf("\n");
     }
 }
-
-// TODO: these definitions don't really belong in tilemap
-void htw_geo_indexToCoords(u32 index, u32 width, u32 *x, u32 *y) {
-    *x = index % width;
-    *y = index / width;
-}
-
-void htw_geo_getHexCellPositionSkewed(s32 x, s32 y, float *xPos, float *yPos) {
-    *yPos = sqrt(0.75) * y;
-    *xPos = x + ((float)y * 0.5);
-}
-
-void htw_getHexCellPositionStaggered(int x, int y, float *xPos, float *yPos) {
-    *yPos = sqrt(0.75) * y;
-    if (y % 2 == 1) *xPos = (double)x;
-    else *xPos = (double)x + 0.5;
-}

@@ -25,6 +25,10 @@ typedef uint32_t htw_ShaderHandle;
 typedef uint32_t htw_ShaderLayoutHandle;
 typedef uint32_t htw_PipelineHandle;
 
+typedef enum htw_BufferPoolType {
+    HTW_BUFFER_POOL_TYPE_DIRECT = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, // can be updated from host and used in pipelines with no transitions
+} htw_BufferPoolType;
+
 typedef enum htw_BufferUsageType {
     HTW_BUFFER_USAGE_VERTEX = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
     HTW_BUFFER_USAGE_INDEX = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -55,9 +59,16 @@ typedef enum htw_Samplers {
     HTW_SAMPLER_ENUM_COUNT
 } htw_Samplers;
 
+typedef enum htw_VertexInputType {
+    HTW_VERTEX_TYPE_UINT,
+    HTW_VERTEX_TYPE_SINT,
+    HTW_VERTEX_TYPE_FLOAT
+} htw_VertexInputType;
+
 typedef struct {
     uint32_t size;
     uint32_t offset;
+    htw_VertexInputType inputType;
 } htw_ShaderInputInfo;
 
 typedef struct {
@@ -75,6 +86,7 @@ typedef VkDescriptorSetLayout htw_DescriptorSetLayout;
 
 typedef VkDescriptorSet htw_DescriptorSet;
 
+// TODO: update the pipeline/pipelinehandle format to match buffers (private _htw_pipeline, public htw_pipeline)
 typedef struct {
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
@@ -84,11 +96,29 @@ typedef struct {
 
 typedef struct {
     VkBuffer buffer;
-    size_t hostSize;
-    void *hostData;
     VkMemoryRequirements deviceMemoryRequirements;
     VkDeviceSize deviceOffset;
-} htw_Buffer;
+} _htw_Buffer;
+
+typedef _htw_Buffer* htw_Buffer;
+
+typedef struct {
+    htw_Buffer buffer;
+    u32 subBufferCount;
+    size_t subBufferHostSize;
+    VkDeviceSize _subBufferDeviceSize;
+} htw_SplitBuffer;
+
+typedef struct {
+    u32 maxCount;
+    u32 currentCount;
+    VkMemoryPropertyFlags memoryFlags;
+    VkDeviceMemory deviceMemory;
+    VkDeviceSize nextBufferMemoryOffset;
+    _htw_Buffer *buffers;
+} _htw_BufferPool;
+
+typedef _htw_BufferPool* htw_BufferPool;
 
 typedef struct {
     VkImage image;
@@ -97,18 +127,17 @@ typedef struct {
     VkImageLayout layout;
     VkFormat format;
     VkDeviceMemory deviceMemory;
-    uint32_t width;
-    uint32_t height;
+    u32 width;
+    u32 height;
 } htw_Texture;
 
 typedef struct {
-    htw_Buffer *vertexBuffer;
-    htw_Buffer *indexBuffer;
-    htw_Buffer *instanceBuffer;
-    uint32_t vertexCount;
-    uint32_t indexCount;
-    uint32_t instanceCount;
-    // texture data?
+    htw_Buffer vertexBuffer;
+    htw_Buffer indexBuffer;
+    htw_Buffer instanceBuffer;
+    u32 vertexCount;
+    u32 indexCount;
+    u32 instanceCount;
 } htw_ModelData;
 
 typedef struct {
@@ -123,6 +152,7 @@ typedef struct {
     VkSemaphore swapchainReleaseSemaphore; // one per SwapchainImageContext
 } htw_SwapchainImageContext;
 
+// TODO: hide this struct, provide an opaque pointer handle publically and use update methods to match
 typedef struct {
     SDL_Window *window;
 
@@ -148,8 +178,7 @@ typedef struct {
 
     VkDescriptorSetLayout defaultSetLayout;
 
-    uint32_t bufferCount;
-    htw_Buffer *buffers;
+    _htw_BufferPool bufferPool;
 
     VkSampler *samplers;
 
@@ -172,11 +201,6 @@ typedef struct {
 
     VkSemaphore *aquiredImageSemaphores;
     VkFence *aquiredImageFences;
-
-    // device memory offest to address after last created buffer
-    VkDeviceSize lastBufferOffset;
-    VkDeviceMemory deviceMemory;
-    //VkBuffer *uniformBuffers; // because uniforms are updated every frame, need to have as many uniform buffers as swapchain images
 
 } htw_VkContext;
 
@@ -207,7 +231,7 @@ void htw_updatePerFrameDescriptor(htw_VkContext *vkContext, htw_DescriptorSet fr
 void htw_updatePerPassDescriptor(htw_VkContext *vkContext, htw_DescriptorSet passDescriptor); // TODO/UNUSED
 void htw_updateTextDescriptor(htw_VkContext *vkContext, htw_DescriptorSet pipelineDescriptor, htw_Buffer uniformBuffer, htw_Texture glyphTexture);
 void htw_updateTerrainPipelineDescriptor(htw_VkContext *vkContext, htw_DescriptorSet pipelineDescriptor); // TODO/UNUSED
-void htw_updateTerrainObjectDescriptors(htw_VkContext *vkContext, htw_DescriptorSet* objectDescriptors, u32 subBufferCount, size_t subBufferDeviceSize, htw_Buffer terrainData);
+void htw_updateTerrainObjectDescriptors(htw_VkContext *vkContext, htw_DescriptorSet* objectDescriptors, htw_SplitBuffer chunkBuffer);
 
 /**
  * @brief returns a handle to a pipeline object that can be used in htw_bindDescriptor and htw_drawPipeline
@@ -219,29 +243,23 @@ void htw_updateTerrainObjectDescriptors(htw_VkContext *vkContext, htw_Descriptor
  */
 htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_DescriptorSetLayout *layouts, htw_ShaderSet shaderInfo);
 
-htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size, htw_BufferUsageType bufferType);
+htw_BufferPool htw_createBufferPool(htw_VkContext *vkContext, u32 poolItemCount, htw_BufferPoolType poolType);
+htw_Buffer htw_createBuffer(htw_VkContext *vkContext, htw_BufferPool pool, size_t size, htw_BufferUsageType bufferType);
 // Create a buffer that will be used as multiple smaller 'logical' buffers; the total size will be adjusted to account for gpu alignment requirements when binding each sub buffer, and *subBufferDeviceSize is set to device size per sub buffer
-htw_Buffer htw_createSplitBuffer(htw_VkContext *vkContext, size_t subBufferSize, u32 subBufferCount, htw_BufferUsageType bufferType, size_t *subBufferDeviceSize);
-// Allocate enough GPU memory for all provided buffers, and upload the contents of each
-void htw_finalizeBuffers(htw_VkContext *vkContext, uint32_t bufferCount, htw_Buffer *buffers);
-// bind buffers after allocation and before use
-void htw_bindBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffers);
-// Upload current buffer contents to the GPU
-void htw_updateBuffer(htw_VkContext *vkContext, htw_Buffer *buffer);
-void htw_updateSubBuffer(htw_VkContext *vkContext, htw_Buffer *buffer, size_t hostOffset, size_t deviceOffset, size_t range);
-void htw_updateBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffers);
-// Pull GPU buffer contents to host accessible memory
-void htw_retreiveBuffer(htw_VkContext *vkContext, htw_Buffer *buffer);
+htw_SplitBuffer htw_createSplitBuffer(htw_VkContext *vkContext, htw_BufferPool pool, size_t subBufferSize, u32 subBufferCount, htw_BufferUsageType bufferType);
+// Allocate enough GPU memory for all provided buffers, and bind pool buffers to that memory block
+void htw_finalizeBufferPool(htw_VkContext *vkContext, htw_BufferPool pool);
+// Write to the device memory backing a buffer
+void htw_writeBuffer(htw_VkContext *vkContext, htw_Buffer buffer, void *hostData, size_t range);
+void htw_writeSubBuffer(htw_VkContext *vkContext, htw_SplitBuffer *buffer, u32 subBufferIndex, void *hostData, size_t range);
+// Pull device-side buffer contents to host accessible memory
+void htw_retreiveBuffer(htw_VkContext *vkContext, htw_Buffer buffer, void *hostData, size_t range);
 htw_Texture htw_createGlyphTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height);
 htw_Texture htw_createMappedTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height);
 // methods between begin and end one-time commands should only be called in between calls to the same
 void htw_beginOneTimeCommands(htw_VkContext *vkContext);
 void htw_updateTexture(htw_VkContext *vkContext, htw_Buffer source, htw_Texture dest);
 void htw_endOneTimeCommands(htw_VkContext *vkContext);
-// NOTE: probably not a good way to do this because the caller could free before render loop is done
-// Consider creating a staging void* with the same capacity, and having the user write to that.
-// TODO: is this still needed?
-void htw_mapPipelinePushConstant(htw_VkContext *vkContext, htw_PipelineHandle pipeline, void *pushConstantData);
 // methods between begin and end frame should only be called in between calls to the same
 void htw_beginFrame(htw_VkContext *vkContext);
 void htw_bindPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle);

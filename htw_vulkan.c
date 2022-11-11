@@ -34,7 +34,8 @@ static const LayoutTransitionMaskSet layoutTransitionMaskSets[] = {
 };
 
 static uint32_t getBestMemoryTypeIndex(htw_VkContext *vkContext, uint32_t memoryTypeBits, VkMemoryPropertyFlags propertyFlags);
-size_t getAlignedBufferSize (htw_VkContext* vkContext, size_t size, VkDeviceSize alignment);
+size_t getAlignedBufferSize (size_t size, VkDeviceSize alignment);
+VkFormat getVertexInputFormat(htw_VertexInputType inputType, u32 size);
 
 static VkShaderModule loadShaderModule(htw_VkContext *vkContext, const char *filePath);
 static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_DescriptorSetLayout *layouts, htw_ShaderSet shaderInfo);
@@ -170,12 +171,8 @@ htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow) {
     context->shaders = malloc(sizeof(VkShaderModule) * HTW_VK_MAX_SHADERS);
     context->pipelineCount = 0;
     context->pipelines = malloc(sizeof(htw_Pipeline) * HTW_VK_MAX_PIPELINES);
-    context->bufferCount = 0;
-    context->buffers = malloc(sizeof(htw_Buffer) * HTW_VK_MAX_BUFFERS);
 
     context->defaultSetLayout = htw_createEmptySetLayout(context);
-
-    context->lastBufferOffset = 0;
 
     // init semaphores for aquired images
     context->aquiredImageSemaphores = malloc(sizeof(VkSemaphore) * HTW_MAX_AQUIRED_IMAGES);
@@ -377,6 +374,7 @@ void htw_destroyVkContext(htw_VkContext* vkContext) {
     vkWaitForFences(vkContext->device, HTW_MAX_AQUIRED_IMAGES, vkContext->aquiredImageFences, VK_TRUE, UINT64_MAX);
 
     // vulkan teardown
+    // TODO: why does the 3rd pipeline segfault with "corrupted size vs. prev_size"
     for (int i = 0; i < vkContext->pipelineCount; i++) {
         vkDestroyPipelineLayout(vkContext->device, vkContext->pipelines[i].pipelineLayout, NULL);
         vkDestroyPipeline(vkContext->device, vkContext->pipelines[i].pipeline, NULL);
@@ -391,9 +389,12 @@ void htw_destroyVkContext(htw_VkContext* vkContext) {
     }
     free(vkContext->shaders);
 
-    for (int i = 0; i < vkContext->bufferCount; i++) {
-        vkDestroyBuffer(vkContext->device, vkContext->buffers[i].buffer, NULL);
+    // TODO: iterate through buffer pools
+    for (int i = 0; i < vkContext->bufferPool.currentCount; i++) {
+        vkDestroyBuffer(vkContext->device, vkContext->bufferPool.buffers[i].buffer, NULL);
     }
+    vkFreeMemory(vkContext->device, vkContext->bufferPool.deviceMemory, NULL);
+    free(vkContext->bufferPool.buffers);
 
     // because the first sampler is just VK_NULL_HANDLE, skip destoying it
     for (int i = 1; i < HTW_SAMPLER_ENUM_COUNT; i++) {
@@ -427,7 +428,6 @@ void htw_destroyVkContext(htw_VkContext* vkContext) {
     vkDestroyImage(vkContext->device, vkContext->depthBuffer.image, NULL);
     vkFreeMemory(vkContext->device, vkContext->depthBuffer.deviceMemory, NULL);
 
-    vkFreeMemory(vkContext->device, vkContext->deviceMemory, NULL);
     vkDestroySwapchainKHR(vkContext->device, vkContext->swapchain, NULL);
     vkDestroyRenderPass(vkContext->device, vkContext->renderPass, NULL);
     vkDestroyDescriptorPool(vkContext->device, vkContext->descriptorPool, NULL);
@@ -620,19 +620,19 @@ void htw_allocateDescriptors(htw_VkContext *vkContext, htw_DescriptorSetLayout l
 
 void htw_updatePerFrameDescriptor(htw_VkContext *vkContext, htw_DescriptorSet frameDescriptor, htw_Buffer windowInfo, htw_Buffer feedbackInfo, htw_Buffer worldInfo) {
     VkDescriptorBufferInfo windowBufferInfo = {
-        .buffer = windowInfo.buffer,
+        .buffer = windowInfo->buffer,
         .offset = 0,
-        .range = windowInfo.hostSize
+        .range = windowInfo->deviceMemoryRequirements.size
     };
     VkDescriptorBufferInfo feedbackBufferInfo = {
-        .buffer = feedbackInfo.buffer,
+        .buffer = feedbackInfo->buffer,
         .offset = 0,
-        .range = feedbackInfo.hostSize
+        .range = feedbackInfo->deviceMemoryRequirements.size
     };
     VkDescriptorBufferInfo worldBufferInfo = {
-        .buffer = worldInfo.buffer,
+        .buffer = worldInfo->buffer,
         .offset = 0,
-        .range = worldInfo.hostSize
+        .range = worldInfo->deviceMemoryRequirements.size
     };
 
     VkWriteDescriptorSet windowWriteInfo = {
@@ -670,9 +670,9 @@ void htw_updatePerPassDescriptor(htw_VkContext *vkContext, htw_DescriptorSet pas
 
 void htw_updateTextDescriptor(htw_VkContext *vkContext, htw_DescriptorSet pipelineDescriptor, htw_Buffer uniformBuffer, htw_Texture glyphTexture) {
     VkDescriptorBufferInfo uniformBufferInfo = {
-        .buffer = uniformBuffer.buffer,
+        .buffer = uniformBuffer->buffer,
         .offset = 0,
-        .range = uniformBuffer.hostSize
+        .range = uniformBuffer->deviceMemoryRequirements.size
     };
     VkDescriptorImageInfo glyphImageInfo = {
         .sampler = glyphTexture.sampler,
@@ -704,14 +704,14 @@ void htw_updateTextDescriptor(htw_VkContext *vkContext, htw_DescriptorSet pipeli
 
 void htw_updateTerrainPipelineDescriptor(htw_VkContext *vkContext, htw_DescriptorSet pipelineDescriptor); // TODO/UNUSED
 
-void htw_updateTerrainObjectDescriptors(htw_VkContext *vkContext, htw_DescriptorSet* objectDescriptors, u32 subBufferCount, size_t subBufferDeviceSize, htw_Buffer terrainData) {
-    VkDescriptorBufferInfo *chunkBufferInfos = malloc(sizeof(VkDescriptorBufferInfo) * subBufferCount);
-    VkWriteDescriptorSet *writeSetInfos = malloc(sizeof(VkWriteDescriptorSet) * subBufferCount);
-    for (int i = 0; i < subBufferCount; i++) {
+void htw_updateTerrainObjectDescriptors(htw_VkContext *vkContext, htw_DescriptorSet* objectDescriptors, htw_SplitBuffer chunkBuffer) {
+    VkDescriptorBufferInfo *chunkBufferInfos = malloc(sizeof(VkDescriptorBufferInfo) * chunkBuffer.subBufferCount);
+    VkWriteDescriptorSet *writeSetInfos = malloc(sizeof(VkWriteDescriptorSet) * chunkBuffer.subBufferCount);
+    for (int i = 0; i < chunkBuffer.subBufferCount; i++) {
         VkDescriptorBufferInfo chunkBufferInfo = {
-            .buffer = terrainData.buffer,
-            .offset = i * subBufferDeviceSize,
-            .range = subBufferDeviceSize
+            .buffer = chunkBuffer.buffer->buffer,
+            .offset = i * chunkBuffer._subBufferDeviceSize,
+            .range = chunkBuffer._subBufferDeviceSize
         };
         chunkBufferInfos[i] = chunkBufferInfo;
 
@@ -726,7 +726,7 @@ void htw_updateTerrainObjectDescriptors(htw_VkContext *vkContext, htw_Descriptor
         };
         writeSetInfos[i] = chunkWriteInfo;
     }
-    vkUpdateDescriptorSets(vkContext->device, subBufferCount, writeSetInfos, 0, NULL);
+    vkUpdateDescriptorSets(vkContext->device, chunkBuffer.subBufferCount, writeSetInfos, 0, NULL);
     free(chunkBufferInfos);
     free(writeSetInfos);
 }
@@ -737,9 +737,23 @@ htw_PipelineHandle htw_createPipeline(htw_VkContext *vkContext, htw_DescriptorSe
     return nextHandle;
 }
 
-htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size, htw_BufferUsageType bufferType) {
-    uint32_t nextBuffer = vkContext->bufferCount++;
-    htw_Buffer newBuffer;
+// TODO: allow for creation of multiple pools (right now will just replace existing pool)
+htw_BufferPool htw_createBufferPool(htw_VkContext *vkContext, u32 poolItemCount, htw_BufferPoolType poolType) {
+    _htw_BufferPool newPool = {
+        .maxCount = poolItemCount,
+        .currentCount = 0,
+        .memoryFlags = poolType,
+        .deviceMemory = VK_NULL_HANDLE,
+        .nextBufferMemoryOffset = 0,
+        .buffers = malloc(sizeof(_htw_Buffer) * poolItemCount)
+    };
+    vkContext->bufferPool = newPool;
+    return &vkContext->bufferPool;
+}
+
+htw_Buffer htw_createBuffer(htw_VkContext *vkContext, htw_BufferPool pool, size_t size, htw_BufferUsageType bufferType) {
+    u32 poolIndex = pool->currentCount++;
+    _htw_Buffer newBuffer;
     // create vkBuffer
     VkBufferCreateInfo bufferInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -748,121 +762,111 @@ htw_Buffer htw_createBuffer(htw_VkContext *vkContext, size_t size, htw_BufferUsa
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE
     };
     vkCreateBuffer(vkContext->device, &bufferInfo, NULL, &newBuffer.buffer);
-    newBuffer.hostSize = size;
-    newBuffer.hostData = malloc(size);
+    //printf("created buffer %i type = %i, size = %lu\n", poolIndex, bufferType, size);
     // get device memory requirements
     vkGetBufferMemoryRequirements(vkContext->device, newBuffer.buffer, &newBuffer.deviceMemoryRequirements);
     if (newBuffer.deviceMemoryRequirements.memoryTypeBits == 0)
         fprintf(stderr, "No suitable memory type for buffer of size %lu, type %i\n", size, bufferType);
-    size_t alignedSize = getAlignedBufferSize(vkContext, size, newBuffer.deviceMemoryRequirements.alignment);
-    // set memory offset and move tracker forward
-    newBuffer.deviceMemoryRequirements.size = alignedSize;
-    //newBuffer.deviceOffset = vkContext->lastBufferOffset;
-    newBuffer.deviceOffset = getAlignedBufferSize(vkContext, vkContext->lastBufferOffset, newBuffer.deviceMemoryRequirements.alignment);
-    //printf("created buffer %i type = %i, size = %lu, offset = %lu\n", nextBuffer, bufferType, alignedSize, newBuffer.deviceOffset);
-    vkContext->lastBufferOffset += alignedSize; // TODO: need to do anything else to ensure that the start of the next buffer created is aligned correctly?
-    vkContext->buffers[nextBuffer] = newBuffer;
 
-    return newBuffer;
+    pool->buffers[poolIndex] = newBuffer;
+    return &pool->buffers[poolIndex];
 }
 
-htw_Buffer htw_createSplitBuffer(htw_VkContext *vkContext, size_t subBufferSize, u32 subBufferCount, htw_BufferUsageType bufferType, size_t *subBufferDeviceSize) {
-    uint32_t nextBuffer = vkContext->bufferCount++;
-    htw_Buffer newBuffer;
-    // create vkBuffer
-    size_t hostSize = subBufferSize * subBufferCount;
-    VkBufferCreateInfo bufferInfo = {
+htw_SplitBuffer htw_createSplitBuffer(htw_VkContext *vkContext, htw_BufferPool pool, size_t subBufferSize, u32 subBufferCount, htw_BufferUsageType bufferType) {
+    // create temporary buffer to check subBuffer memory alignment requirements
+    VkBuffer tempBuffer;
+    VkBufferCreateInfo tempBufferInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = hostSize,
+        .size = subBufferSize,
         .usage = bufferType,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE
     };
-    vkCreateBuffer(vkContext->device, &bufferInfo, NULL, &newBuffer.buffer);
-    newBuffer.hostSize = hostSize;
-    newBuffer.hostData = malloc(hostSize);
-    // get device memory requirements
-    vkGetBufferMemoryRequirements(vkContext->device, newBuffer.buffer, &newBuffer.deviceMemoryRequirements);
-    if (newBuffer.deviceMemoryRequirements.memoryTypeBits == 0)
-        fprintf(stderr, "No suitable memory type for buffer of size %lu, type %i\n", hostSize, bufferType);
-    // ensure that each sub buffer meets device alignment requirements
-    size_t alignedSubBufferSize = getAlignedBufferSize(vkContext, subBufferSize, newBuffer.deviceMemoryRequirements.alignment);
+    vkCreateBuffer(vkContext->device, &tempBufferInfo, NULL, &tempBuffer);
+    VkMemoryRequirements tempMemoryRequirements;
+    vkGetBufferMemoryRequirements(vkContext->device, tempBuffer, &tempMemoryRequirements);
+    size_t alignedSubBufferSize = getAlignedBufferSize(subBufferSize, tempMemoryRequirements.alignment);
     size_t totalDeviceSize = alignedSubBufferSize * subBufferCount;
-    *subBufferDeviceSize = alignedSubBufferSize;
-    // set memory offset and move tracker forward
-    newBuffer.deviceMemoryRequirements.size = totalDeviceSize;
-    //newBuffer.deviceOffset = vkContext->lastBufferOffset;
-    newBuffer.deviceOffset = getAlignedBufferSize(vkContext, vkContext->lastBufferOffset, newBuffer.deviceMemoryRequirements.alignment);
-    //printf("created buffer %i type = %i, size = %lu, offset = %lu\n", nextBuffer, bufferType, alignedSize, newBuffer.deviceOffset);
-    vkContext->lastBufferOffset += totalDeviceSize;
-    vkContext->buffers[nextBuffer] = newBuffer;
+    vkDestroyBuffer(vkContext->device, tempBuffer, NULL);
 
-    return newBuffer;
+    // create split buffer with sub buffer info
+    htw_SplitBuffer newSplitBuffer = {
+        .buffer = htw_createBuffer(vkContext, pool, totalDeviceSize, bufferType),
+        .subBufferCount = subBufferCount,
+        .subBufferHostSize = subBufferSize,
+        ._subBufferDeviceSize = alignedSubBufferSize
+    };
+
+    return newSplitBuffer;
 }
 
-void htw_finalizeBuffers(htw_VkContext *vkContext, uint32_t bufferCount, htw_Buffer *buffers) {
-    // TODO: go through this process for each buffer type users can request and allocate a block of GPU memory for each
+void htw_finalizeBufferPool(htw_VkContext *vkContext, htw_BufferPool pool) {
+    _htw_BufferPool *p = pool;
     // determine common memory requirements for all buffers
     uint32_t memoryTypeBits = 0xffffffff;
-    VkDeviceSize combinedSize = 0;
-    for (int i = 0; i < bufferCount; i++) {
+    VkDeviceSize nextBufferOffset = 0;
+    for (int i = 0; i < p->currentCount; i++) {
         //printf("suitable memory bits for buffer %i: 0x%.8x\n", i, buffers[i].deviceMemoryRequirements.memoryTypeBits);
-        memoryTypeBits = buffers[i].deviceMemoryRequirements.memoryTypeBits & memoryTypeBits;
-        combinedSize += buffers[i].deviceMemoryRequirements.size;
+        memoryTypeBits = p->buffers[i].deviceMemoryRequirements.memoryTypeBits & memoryTypeBits;
+        // end of last buffer may not meet alignment requirements for this buffer, this ensures that the offset is >= last offset and aligned correctly
+        nextBufferOffset = getAlignedBufferSize(nextBufferOffset, p->buffers[i].deviceMemoryRequirements.alignment);
+        p->buffers[i].deviceOffset = nextBufferOffset;
+        nextBufferOffset += p->buffers[i].deviceMemoryRequirements.size;
     }
+    //p->buffers[0].deviceOffset = 0;
     if (memoryTypeBits == 0) { // no common suitable memory type
         fprintf(stderr, "No memory type meets common buffer memory requirements\n");
         exit(1);
     }
-    //establish program memory requirements; must be able to copy data into device memory
-    VkMemoryPropertyFlags programRequiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     // determine type of memory to use
-    uint32_t memoryTypeIndex = getBestMemoryTypeIndex(vkContext, memoryTypeBits, programRequiredFlags);
-    // allocate device memory; batch allocations to do this as few times as possible
-    printf("allocating %lu bytes of device memory with flags %u\n", combinedSize, programRequiredFlags);
+    uint32_t memoryTypeIndex = getBestMemoryTypeIndex(vkContext, memoryTypeBits, p->memoryFlags);
+    // allocate device memory
+    printf("allocating %lu bytes of device memory with flags %u\n", nextBufferOffset, p->memoryFlags);
     VkMemoryAllocateInfo memoryInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = combinedSize,
+        .allocationSize = nextBufferOffset,
         .memoryTypeIndex = memoryTypeIndex
     };
-    VK_CHECK(vkAllocateMemory(vkContext->device, &memoryInfo, NULL, &vkContext->deviceMemory));
-}
+    VK_CHECK(vkAllocateMemory(vkContext->device, &memoryInfo, NULL, &p->deviceMemory));
 
-void htw_bindBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffers) {
-    for (int i = 0; i < count; i++) {
-        vkBindBufferMemory(vkContext->device, buffers[i].buffer, vkContext->deviceMemory, buffers[i].deviceOffset);
+    // bind buffers to memory block
+    for (int i = 0; i < p->currentCount; i++) {
+        vkBindBufferMemory(vkContext->device, p->buffers[i].buffer, p->deviceMemory, p->buffers[i].deviceOffset);
     }
 }
 
-// TODO: calling this per-frame runs fine right now, may need a solution with better performance later
-void htw_updateBuffer(htw_VkContext *vkContext, htw_Buffer *buffer) {
+// TODO: need a way to find the pool containing the specified buffer. Would like to not require specifying the pool in htw_write*Buffer calls, but there may be no good way around it
+void htw_writeBuffer(htw_VkContext *vkContext, htw_Buffer buffer, void *hostData, size_t range) {
+    if (range > buffer->deviceMemoryRequirements.size) {
+        fprintf(stderr, "Error: tried to write range larger than allowed size for buffer %p; device size = %lu, range = %lu", buffer, buffer->deviceMemoryRequirements.size, range);
+        return;
+    }
     // copy program data to buffer
     // note: data is not always immediately copied into buffer memory. In this case the problem is solved by the use of memory with the VK_MEMORY_PROPERTY_HOST_COHERENT_BIT bit set
     // data transfer to the GPU is done later, but guaranteed to be complete before any VkQueueSubmit work is started
     void* dest;
-    vkMapMemory(vkContext->device, vkContext->deviceMemory, buffer->deviceOffset, buffer->deviceMemoryRequirements.size, 0, &dest);
-    memcpy(dest, buffer->hostData, buffer->hostSize);
-    vkUnmapMemory(vkContext->device, vkContext->deviceMemory);
+    vkMapMemory(vkContext->device, vkContext->bufferPool.deviceMemory, buffer->deviceOffset, buffer->deviceMemoryRequirements.size, 0, &dest);
+    memcpy(dest, hostData, range);
+    vkUnmapMemory(vkContext->device, vkContext->bufferPool.deviceMemory);
 }
 
 // TODO: might make sense to create an expanded buffer type for split buffers, that can include details on host+device sub buffer sizes and counts
-void htw_updateSubBuffer(htw_VkContext *vkContext, htw_Buffer *buffer, size_t hostOffset, size_t deviceOffset, size_t range) {
-    void* dest;
-    vkMapMemory(vkContext->device, vkContext->deviceMemory, buffer->deviceOffset + deviceOffset, range, 0, &dest);
-    memcpy(dest, buffer->hostData + hostOffset, range);
-    vkUnmapMemory(vkContext->device, vkContext->deviceMemory);
-}
-
-void htw_updateBuffers(htw_VkContext *vkContext, uint32_t count, htw_Buffer *buffers) {
-    for (int i = 0; i < count; i++) {
-        htw_updateBuffer(vkContext, &buffers[i]);
+void htw_writeSubBuffer(htw_VkContext *vkContext, htw_SplitBuffer *buffer, u32 subBufferIndex, void *hostData, size_t range) {
+    if (range > buffer->subBufferHostSize) {
+        fprintf(stderr, "Error: tried to write range larger than sub-buffer size for buffer %p; device size = %lu, range = %lu", buffer, buffer->subBufferHostSize, range);
+        return;
     }
+    VkDeviceSize subBufferOffset = buffer->_subBufferDeviceSize * subBufferIndex;
+    void* dest;
+    vkMapMemory(vkContext->device, vkContext->bufferPool.deviceMemory, buffer->buffer->deviceOffset + subBufferOffset, range, 0, &dest);
+    memcpy(dest, hostData, range);
+    vkUnmapMemory(vkContext->device, vkContext->bufferPool.deviceMemory);
 }
 
-void htw_retreiveBuffer(htw_VkContext *vkContext, htw_Buffer *buffer) {
+void htw_retreiveBuffer(htw_VkContext *vkContext, htw_Buffer buffer, void *hostData, size_t range) {
     void* dest;
-    vkMapMemory(vkContext->device, vkContext->deviceMemory, buffer->deviceOffset, buffer->deviceMemoryRequirements.size, 0, &dest);
-    memcpy(buffer->hostData, dest, buffer->hostSize);
-    vkUnmapMemory(vkContext->device, vkContext->deviceMemory);
+    vkMapMemory(vkContext->device, vkContext->bufferPool.deviceMemory, buffer->deviceOffset, buffer->deviceMemoryRequirements.size, 0, &dest);
+    memcpy(hostData, dest, range);
+    vkUnmapMemory(vkContext->device, vkContext->bufferPool.deviceMemory);
 }
 
 htw_Texture htw_createGlyphTexture(htw_VkContext *vkContext, uint32_t width, uint32_t height) {
@@ -892,13 +896,9 @@ void htw_updateTexture(htw_VkContext *vkContext, htw_Buffer source, htw_Texture 
         .imageOffset = {0, 0, 0},
         .imageExtent = {dest.width, dest.height, 1}
     };
-    vkCmdCopyBufferToImage(cmd, source.buffer, dest.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imageCopy);
+    vkCmdCopyBufferToImage(cmd, source->buffer, dest.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imageCopy);
 
     transitionImageLayout(cmd, &dest, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, HTW_LAYOUT_TRANSITION_COPY_TO_FRAGMENT);
-}
-
-void htw_mapPipelinePushConstant(htw_VkContext *vkContext, htw_PipelineHandle pipeline, void *pushConstantData) {
-    vkContext->pipelines[pipeline].pushConstantData = pushConstantData;
 }
 
 static uint32_t getBestMemoryTypeIndex(htw_VkContext *vkContext, uint32_t memoryTypeBits, VkMemoryPropertyFlags propertyFlags) {
@@ -930,7 +930,8 @@ static uint32_t getBestMemoryTypeIndex(htw_VkContext *vkContext, uint32_t memory
     return memoryTypeIndex;
 }
 
-size_t getAlignedBufferSize (htw_VkContext* vkContext, size_t size, VkDeviceSize alignment) {
+// NOTE: size = 0 will always return 0
+size_t getAlignedBufferSize(size_t size, VkDeviceSize alignment) {
     size_t alignedSize = size; // return same size if it fits cleanly
     int diff = size % alignment;
     if (diff != 0) {
@@ -938,6 +939,75 @@ size_t getAlignedBufferSize (htw_VkContext* vkContext, size_t size, VkDeviceSize
         alignedSize = size + (alignment - diff);
     }
     return alignedSize;
+}
+
+VkFormat getVertexInputFormat(htw_VertexInputType inputType, u32 size) {
+    switch (inputType) {
+        case HTW_VERTEX_TYPE_UINT:
+            switch (size) {
+                case 4:
+                    return VK_FORMAT_R32_UINT;
+                    break;
+                case 8:
+                    return VK_FORMAT_R32G32_UINT;
+                    break;
+                case 12:
+                    return VK_FORMAT_R32G32B32_UINT;
+                    break;
+                case 16:
+                    return VK_FORMAT_R32G32B32A32_UINT;
+                    break;
+                default:
+                    fprintf(stderr, "Invalid vertex input attribute size: %u\n", size);
+                    return VK_FORMAT_UNDEFINED;
+                    break;
+            }
+            break;
+        case HTW_VERTEX_TYPE_SINT:
+            switch (size) {
+                case 4:
+                    return VK_FORMAT_R32_SINT;
+                    break;
+                case 8:
+                    return VK_FORMAT_R32G32_SINT;
+                    break;
+                case 12:
+                    return VK_FORMAT_R32G32B32_SINT;
+                    break;
+                case 16:
+                    return VK_FORMAT_R32G32B32A32_SINT;
+                    break;
+                default:
+                    fprintf(stderr, "Invalid vertex input attribute size: %u\n", size);
+                    return VK_FORMAT_UNDEFINED;
+                    break;
+            }
+            break;
+        case HTW_VERTEX_TYPE_FLOAT:
+            switch (size) {
+                case 4:
+                    return VK_FORMAT_R32_SFLOAT;
+                    break;
+                case 8:
+                    return VK_FORMAT_R32G32_SFLOAT;
+                    break;
+                case 12:
+                    return VK_FORMAT_R32G32B32_SFLOAT;
+                    break;
+                case 16:
+                    return VK_FORMAT_R32G32B32A32_SFLOAT;
+                    break;
+                default:
+                    fprintf(stderr, "Invalid vertex input attribute size: %u\n", size);
+                    return VK_FORMAT_UNDEFINED;
+                    break;
+            }
+            break;
+        default:
+            fprintf(stderr, "Invalid vertex input type: %i\n", inputType);
+            return VK_FORMAT_UNDEFINED;
+            break;
+    }
 }
 
 static VkShaderModule loadShaderModule(htw_VkContext *vkContext, const char *filePath) {
@@ -1043,30 +1113,10 @@ static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_DescriptorSetLa
             .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
         };
         bindingDescriptions[d] = bindingDescription;
-        // determine format to use
-        VkFormat format;
-        switch (layoutInfo.size) {
-            case 4:
-                format = VK_FORMAT_R32_SFLOAT;
-                break;
-            case 8:
-                format = VK_FORMAT_R32G32_SFLOAT;
-                break;
-            case 12:
-                format = VK_FORMAT_R32G32B32_SFLOAT;
-                break;
-            case 16:
-                format = VK_FORMAT_R32G32B32A32_SFLOAT;
-                break;
-            default:
-                format = VK_FORMAT_UNDEFINED;
-                fprintf(stderr, "Invalid vertex input attribute size: %u", layoutInfo.size);
-                break;
-        }
         VkVertexInputAttributeDescription attributeDescription = {
             .location = i, // refers to location set in shader input layout
             .binding = 0, // index into the array of bound vertex buffers. Must match corresponding binding description
-            .format = format, // usually something between VK_FORMAT_R32_SFLOAT for float, and VK_FORMAT_R32G32B32A32_SFLOAT for vec4
+            .format = getVertexInputFormat(layoutInfo.inputType ,layoutInfo.size),
             .offset = layoutInfo.offset // from start of vertex or instance element in bytes
         };
         attributeDescriptions[d] = attributeDescription;
@@ -1079,37 +1129,17 @@ static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_DescriptorSetLa
             .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE,
         };
         bindingDescriptions[d] = bindingDescription;
-        // determine format to use
-        VkFormat format;
-        switch (layoutInfo.size) {
-            case 4:
-                format = VK_FORMAT_R32_SFLOAT;
-                break;
-            case 8:
-                format = VK_FORMAT_R32G32_SFLOAT;
-                break;
-            case 12:
-                format = VK_FORMAT_R32G32B32_SFLOAT;
-                break;
-            case 16:
-                format = VK_FORMAT_R32G32B32A32_SFLOAT;
-                break;
-            default:
-                format = VK_FORMAT_UNDEFINED;
-                fprintf(stderr, "Invalid instance input attribute size: %u", layoutInfo.size);
-                break;
-        }
         VkVertexInputAttributeDescription attributeDescription = {
             .location = i, // refers to location set in shader input layout
             .binding = 0, // index into the array of bound vertex buffers. Must match corresponding binding description
-            .format = format, // usually something between VK_FORMAT_R32_SFLOAT for float, and VK_FORMAT_R32G32B32A32_SFLOAT for vec4
+            .format = getVertexInputFormat(layoutInfo.inputType ,layoutInfo.size),
             .offset = layoutInfo.offset // from start of vertex or instance element in bytes
         };
         attributeDescriptions[d] = attributeDescription;
     }
     VkPipelineVertexInputStateCreateInfo vertexInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = d,
+        .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = bindingDescriptions,
         .vertexAttributeDescriptionCount = d,
         .pVertexAttributeDescriptions = attributeDescriptions

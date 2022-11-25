@@ -254,7 +254,7 @@ void htw_beginFrame(htw_VkContext *vkContext) {
     vkBeginCommandBuffer(frameContext->commandBuffer, &cmdInfo);
     // set clear color for swapchain image, and depth clear values for depth buffer (order is same as attachment order)
     VkClearValue clearValues[2];
-    VkClearColorValue clearColors = {{0.1f, 0.1f, 0.2f, 1.0f}};
+    VkClearColorValue clearColors = {{0.0f, 0.0f, 0.0f, 1.0f}};
     VkClearDepthStencilValue depthClear = {.depth = 1.0f, .stencil = 0};
     clearValues[0].color = clearColors;
     clearValues[1].depthStencil = depthClear;
@@ -1154,7 +1154,7 @@ static htw_Pipeline createPipeline(htw_VkContext *vkContext, htw_DescriptorSetLa
     // cull back faces and draw triangles clockwise
     VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .cullMode = VK_CULL_MODE_BACK_BIT,
+        .cullMode = VK_CULL_MODE_NONE,
         .frontFace = VK_FRONT_FACE_CLOCKWISE,
         .lineWidth = 1.0
     };

@@ -49,10 +49,13 @@ u32 htw_geo_getHexArea(u32 edgeLength) {
 
 // Sets the value of iterCoord to be the next coordinate in an outward hexagon spiral starting from (0, 0, 0), moving outward at (q=0 && r >=s) towards +r and continuing clockwise
 void htw_geo_getNextHexSpiralCoord(htw_geo_CubeCoord *iterCoord) {
-    if (iterCoord->q == 0 && iterCoord->r >= iterCoord->s) {
+    if (iterCoord->q == 0 && iterCoord->r >= iterCoord->s) { // true if coord is on the +x axis in cartesian space
+        // move left to next ring
         *iterCoord = htw_geo_addCubeCoords(*iterCoord, htw_geo_cubeDirections[HEX_DIRECTION_EAST]);
     } else {
-        u32 wedge = 0;
+        // determine which 'wedge' (area between 2 direction lines) the coord is in
+        // NOTE: is there any way to do this with fewer checks?
+        s32 wedge = -1;
         if (iterCoord->q >= 0 && iterCoord->r > 0) wedge = 0;
         if (iterCoord->r <= 0 && iterCoord->s < 0) wedge = 1;
         if (iterCoord->s >= 0 && iterCoord->q > 0) wedge = 2;

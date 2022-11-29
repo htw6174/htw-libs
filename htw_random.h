@@ -96,6 +96,22 @@ static u32 xxh_rotateLeft(u32 value, s32 count) {
     return (value << count) | (value >> (32 - count));
 }
 
+static inline u32 xxh_bytesToU32(u8 *bytes) {
+    u32 value = *bytes;
+    value |= (u32)(*(bytes + 1)) << 8;
+    value |= (u32)(*(bytes + 2)) << 16;
+    value |= (u32)(*(bytes + 3)) << 24;
+    return value;
+}
+
+static inline u32 xxh_subHash(u32 value, u8 *bytes) {
+    u32 word = xxh_bytesToU32(bytes);
+    value += word * XXH_PRIME32_2;
+    value = xxh_rotateLeft(value, 13);
+    value *= XXH_PRIME32_1;
+    return value;
+}
+
 static u32 xxh_hash2d(u32 seed, u32 x, u32 y) {
     u32 hash = seed + XXH_PRIME32_5;
     hash += 2 * 4; // equivalent to adding input bytecount in the original. Unsure if it's needed here
@@ -106,6 +122,57 @@ static u32 xxh_hash2d(u32 seed, u32 x, u32 y) {
     // iter 2:
     hash += y * XXH_PRIME32_3;
     hash = xxh_rotateLeft(hash, 17) * XXH_PRIME32_4;
+
+    hash ^= hash >> 15;
+    hash *= XXH_PRIME32_2;
+    hash ^= hash >> 13;
+    hash *= XXH_PRIME32_3;
+    hash ^= hash >> 16;
+
+    return hash;
+}
+
+static u32 xxh_hash(u32 seed, size_t size, u8 *bytes) {
+    u32 hash = 0;
+    u32 i = 0;
+
+    if (size >= 16) {
+        u32 limit = size - 16;
+        u32 v1 = seed + XXH_PRIME32_1 + XXH_PRIME32_2;
+        u32 v2 = seed + XXH_PRIME32_2;
+        u32 v3 = seed + 0;
+        u32 v4 = seed + XXH_PRIME32_1;
+
+        do {
+            v1 = xxh_subHash(v1, &bytes[i]);
+            i += 4;
+            v2 = xxh_subHash(v2, &bytes[i]);
+            i += 4;
+            v3 = xxh_subHash(v3, &bytes[i]);
+            i += 4;
+            v4 = xxh_subHash(v4, &bytes[i]);
+            i += 4;
+        } while (i <= limit);
+
+        hash = xxh_rotateLeft(v1, 1) + xxh_rotateLeft(v2, 7) + xxh_rotateLeft(v3, 12) + xxh_rotateLeft(v4, 18);
+    } else {
+        hash = seed + XXH_PRIME32_5;
+    }
+
+    hash += size;
+
+    while (i <= size - 4) {
+        u32 word = xxh_bytesToU32(&bytes[i]);
+        hash += word * XXH_PRIME32_3;
+        hash = xxh_rotateLeft(hash, 17) * XXH_PRIME32_4;
+        i += 4;
+    }
+
+    while (i < size) {
+        hash += bytes[i] * XXH_PRIME32_5;
+        hash = xxh_rotateLeft(hash, 11) * XXH_PRIME32_1;
+        i++;
+    }
 
     hash ^= hash >> 15;
     hash *= XXH_PRIME32_2;

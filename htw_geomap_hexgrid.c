@@ -32,6 +32,30 @@ htw_geo_GridCoord htw_geo_cubeToGridCoord(htw_geo_CubeCoord cubeCoord) {
     return (htw_geo_GridCoord){cubeCoord.q, cubeCoord.r};
 }
 
+float htw_geo_cartesianToHexPositionX(float x, float y) {
+    return x - (y * (0.5 / sqrt(0.75)));
+}
+
+float htw_geo_cartesianToHexPositionY(float y) {
+    return y * (1.0 / sqrt(0.75));
+}
+
+float htw_geo_hexToCartesianPositionX(float x, float y) {
+    return x + (y * 0.5);
+}
+
+float htw_geo_hexToCartesianPositionY(float y) {
+    return y * sqrt(0.75);
+}
+
+float htw_geo_getHexPositionX(s32 gridX, s32 gridY) {
+    return gridX + ((float)gridY * 0.5);
+}
+
+float htw_geo_getHexPositionY(s32 gridY) {
+    return sqrt(0.75) * gridY;
+}
+
 void htw_geo_getHexCellPositionSkewed(htw_geo_GridCoord gridCoord, float *xPos, float *yPos) {
     *yPos = sqrt(0.75) * gridCoord.y;
     *xPos = gridCoord.x + ((float)gridCoord.y * 0.5);

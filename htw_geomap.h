@@ -118,6 +118,13 @@ u32 htw_geo_isEqualCubeCoords(htw_geo_CubeCoord a, htw_geo_CubeCoord b);
 htw_geo_CubeCoord htw_geo_addCubeCoords(htw_geo_CubeCoord a, htw_geo_CubeCoord b);
 htw_geo_CubeCoord htw_geo_gridToCubeCoord(htw_geo_GridCoord gridCoord);
 htw_geo_GridCoord htw_geo_cubeToGridCoord(htw_geo_CubeCoord cubeCoord);
+
+float htw_geo_cartesianToHexPositionX(float x, float y);
+float htw_geo_cartesianToHexPositionY(float y);
+float htw_geo_hexToCartesianPositionX(float x, float y);
+float htw_geo_hexToCartesianPositionY(float y);
+float htw_geo_getHexPositionX(s32 gridX, s32 gridY);
+float htw_geo_getHexPositionY(s32 gridY);
 void htw_geo_getHexCellPositionSkewed(htw_geo_GridCoord gridCoord, float *xPos, float *yPos);
 
 u32 htw_geo_getHexArea(u32 edgeLength);
@@ -128,7 +135,8 @@ void htw_geo_fillChecker(htw_ValueMap *map, s32 value1, s32 value2, u32 gridOrde
 void htw_geo_fillGradient(htw_ValueMap* map, int gradStart, int gradEnd);
 void htw_geo_fillNoise(htw_ValueMap* map, u32 seed);
 void htw_geo_fillSmoothNoise(htw_ValueMap* map, u32 seed, float scale);
-void htw_geo_fillPerlin(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32 posY, float scale);
+void htw_geo_fillPerlin(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32 posY, float scale, float repeatX, float repeatY);
+void htw_geo_fillSimplex(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32 posY, u32 repeatInterval, u32 samplesPerRepeat);
 
 
 

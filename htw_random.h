@@ -185,17 +185,33 @@ static u32 xxh_hash(u32 seed, size_t size, u8 *bytes) {
 
 /* 2D Noise */
 
+// Hermite curve, 3t^2 - 2t^3. Identical to glsl smoothstep in [0, 1]
+static float private_htw_smoothCurve(float v) {
+    return v * v * (3.0 - 2.0 * v);
+}
+
+// Very similar to a Hermite curve, but with continuous derivative when clamped to [0, 1]
+static float private_htw_smootherCurve(float v) {
+    return v * v * v * (v * (v * 6.0 - 15.0) + 10.0);
+}
+
+static float private_htw_surfletCurve(float v) {
+    v = 0.5 - (v * v);
+    return v * v * v * v * 16.0;
+}
+
 // Value noise
 static float htw_value2d(u32 seed, float sampleX, float sampleY) {
     float integralX, integralY;
     float fractX = modff(sampleX, &integralX);
     float fractY = modff(sampleY, &integralY);
+    u32 x = (u32)integralX, y = (u32)integralY;
 
     // samples
-    float s1 = (float)xxh_hash2d(seed, integralX, integralY);
-    float s2 = (float)xxh_hash2d(seed, integralX + 1, integralY);
-    float s3 = (float)xxh_hash2d(seed, integralX, integralY + 1);
-    float s4 = (float)xxh_hash2d(seed, integralX + 1, integralY + 1);
+    float s1 = (float)xxh_hash2d(seed, x, y);
+    float s2 = (float)xxh_hash2d(seed, x + 1, y);
+    float s3 = (float)xxh_hash2d(seed, x, y + 1);
+    float s4 = (float)xxh_hash2d(seed, x + 1, y + 1);
 
     float l1 = lerp(s1, s2, fractX);
     float l2 = lerp(s3, s4, fractX);
@@ -203,6 +219,12 @@ static float htw_value2d(u32 seed, float sampleX, float sampleY) {
 
     float normalized = l3 / (float)UINT32_MAX;
     return normalized;
+}
+
+static float htw_value2dRepeating(u32 seed, float sampleX, float sampleY, float repeatX, float repeatY) {
+    float wrappedX = sampleX - (repeatX * floorf(sampleX / repeatX));
+    float wrappedY = sampleY - (repeatY * floorf(sampleY / repeatY));
+    return htw_value2d(seed, wrappedX, wrappedY);
 }
 
 // Perlin noise
@@ -218,6 +240,94 @@ static float htw_perlin2d(u32 seed, float sampleX, float sampleY, u32 octaves) {
         value += htw_value2d(seed, scaledX, scaledY) * weight;
         scaledX *= 2.0;
         scaledY *= 2.0;
+    }
+    return value;
+}
+
+static float htw_perlin2dRepeating(u32 seed, float sampleX, float sampleY, u32 octaves, float repeatX, float repeatY) {
+    u32 numerator = pow(2, octaves - 1); // used to weight each octave by half the previous octave, halves each iteration
+    u32 denominator = pow(2, octaves) - 1;
+    float value = 0.0;
+    float scaledX = sampleX;
+    float scaledY = sampleY;
+    for (int i = 0; i < octaves; i++) {
+        float weight = (float)numerator / denominator;
+        numerator = numerator >> 1;
+        value += htw_value2dRepeating(seed, scaledX, scaledY, repeatX, repeatY) * weight;
+        scaledX *= 2.0;
+        scaledY *= 2.0;
+    }
+    return value;
+}
+
+/**
+ * @brief Very limited simplex noise implementation. Designed for use on a hexagonal tile map with descrete cells, so smoothness/continuous derivites are not a concern, and the input sample coordinates are assumed to already be in a skewed hexmap coordinate space.
+ *
+ * @param seed p_seed:...
+ * @param sampleX p_sampleX:...
+ * @param sampleY p_sampleY:...
+ * @return float
+ */
+static float htw_simplex2d(u32 seed, float sampleX, float sampleY, u32 repeatX, u32 repeatY) {
+    float integralX, integralY;
+    float fractX = modff(sampleX, &integralX);
+    float fractY = modff(sampleY, &integralY);
+    u32 x = (u32)integralX, y = (u32)integralY;
+
+    // The skewing in my system is different than a typical simplex noise impelmentation (angle between x and y axis is 60 instead of 120), so determing which simplex a sample lies in is fractX + fractY < 1, instead of x > y
+    u32 simplex = fractX + fractY < 1 ? 0 : 1;
+
+    // wrap sample coordinates
+    u32 x0 = x % repeatX;
+    u32 x1 = (x + 1) % repeatX;
+    u32 y0 = y % repeatY;
+    u32 y1 = (y + 1) % repeatY;
+
+    // kernels - deterministic random values at closest simplex corners
+    float k1 = (float)xxh_hash2d(seed, x1, y0) / (float)UINT32_MAX;
+    float k2 = (float)xxh_hash2d(seed, x0, y1) / (float)UINT32_MAX;
+    u32 k3raw = simplex == 0 ? xxh_hash2d(seed, x0, y0) : xxh_hash2d(seed, x1, y1);
+    float k3 = (float)k3raw / (float)UINT32_MAX;
+
+    // distance of sample from each corner, using cube coordinate distance
+    // = (abs(x1 - x2) + abs(x1 + y1 - x2 - y2) + abs(y1 - y2)) / 2
+    float d1 = (fabs(fractX - 1.0) + fabs(fractX + fractY - 1.0 - 0.0) + fabs(fractY - 0.0)) / 2.0;
+    float d2 = (fabs(fractX - 0.0) + fabs(fractX + fractY - 0.0 - 1.0) + fabs(fractY - 1.0)) / 2.0;
+    float d3 = (fabs(fractX - simplex) + fabs(fractX + fractY - simplex - simplex) + fabs(fractY - simplex)) / 2.0;
+
+    // TODO: could benefit from a non-linear surflet dropoff function or other smoothing, but adding more octaves is good enough for now
+    // remap and smooth distance
+    // d1 = private_htw_smoothCurve(fmin(d1, 1.0));
+    // d2 = private_htw_smoothCurve(fmin(d2, 1.0));
+    // d3 = private_htw_smoothCurve(fmin(d3, 1.0));
+
+    // d1 = private_htw_surfletCurve(d1);
+    // d2 = private_htw_surfletCurve(d2);
+    // d3 = private_htw_surfletCurve(d3);
+
+    // kernel contribution from each corner
+    float c1 = k1 * (1.0 - d1);
+    float c2 = k2 * (1.0 - d2);
+    float c3 = k3 * (1.0 - d3);
+
+    float sum = (c1 + c2 + c3);
+
+    return sum;
+}
+
+static float htw_simplex2dLayered(u32 seed, float sampleX, float sampleY, u32 repeat, u32 layers) {
+    u32 numerator = pow(2, layers - 1); // used to weight each layer by half the previous layer, halves each iteration
+    u32 denominator = pow(2, layers) - 1;
+    float value = 0.0;
+    float scaledX = sampleX;
+    float scaledY = sampleY;
+    for (int i = 0; i < layers; i++) {
+        float weight = (float)numerator / denominator;
+        numerator = numerator >> 1;
+        value += htw_simplex2d(seed, scaledX, scaledY, repeat, repeat) * weight;
+        scaledX *= 2.0;
+        scaledY *= 2.0;
+        repeat *= 2;
     }
     return value;
 }

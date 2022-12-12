@@ -73,12 +73,11 @@ void htw_geo_fillPerlin(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32 
         }
     }
 }
-// Should be able to control: the interval for repeating noise (in cells), number of samples per repeat
+
 void htw_geo_fillSimplex(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32 posY, u32 repeatInterval, u32 samplesPerRepeat) {
     float scale = (float)samplesPerRepeat / repeatInterval;
     for (u32 y = 0; y < map->height; y++) {
         for (u32 x = 0; x < map->width; x++) {
-            //htw_geo_getHexCellPositionSkewed((htw_geo_GridCoord){x + posX, y + posY}, &scaledX, &scaledY);
             float scaledX = (x + posX) * scale;
             float scaledY = (y + posY) * scale;
             float val = htw_simplex2dLayered(seed, scaledX, scaledY, samplesPerRepeat, octaves);

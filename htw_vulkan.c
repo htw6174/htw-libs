@@ -846,6 +846,17 @@ void htw_writeBuffer(htw_VkContext *vkContext, htw_Buffer buffer, void *hostData
     void* dest;
     vkMapMemory(vkContext->device, vkContext->bufferPool.deviceMemory, buffer->deviceOffset, buffer->deviceMemoryRequirements.size, 0, &dest);
     memcpy(dest, hostData, range);
+    // TODO: flush memory. Make optional? Shouldn't be required for host coherent memory
+    // VkDeviceSize alignedSize = getAlignedBufferSize(buffer->deviceMemoryRequirements.size, 0x40);
+    // VkMappedMemoryRange mappedRange = {
+    //     .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+    //     .pNext = NULL,
+    //     .memory = vkContext->bufferPool.deviceMemory,
+    //     .offset = buffer->deviceOffset,
+    //     .size = VK_WHOLE_SIZE
+    // };
+    // vkFlushMappedMemoryRanges(vkContext->device, 1, &mappedRange);
+
     vkUnmapMemory(vkContext->device, vkContext->bufferPool.deviceMemory);
 }
 

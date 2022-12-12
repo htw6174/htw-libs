@@ -158,4 +158,8 @@ static htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_Grid
     return (htw_geo_GridCoord){a.x + b.x, a.y + b.y};
 }
 
+static u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b) {
+    return (abs(a.x - b.x) + abs(a.x + a.y - b.x - b.y) + abs(a.y - b.y)) / 2;
+}
+
 #endif

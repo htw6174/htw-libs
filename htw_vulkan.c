@@ -310,6 +310,16 @@ void htw_pushConstants(htw_VkContext *vkContext, htw_PipelineHandle pipelineHand
     }
 };
 
+void htw_setModelTransform(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, void *modelMatrix) {
+    htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
+    VkCommandBuffer cmd = vkContext->swapchainImages[vkContext->currentImageIndex].commandBuffer;
+
+    // push 4x4 matrix to last half of push constant data
+    if (currentPipeline.pushConstantSize == 128) {
+        vkCmdPushConstants(cmd, currentPipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 64, 64, modelMatrix);
+    }
+}
+
 void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHandle, htw_ModelData *modelData, htw_DrawFlags drawFlags)
 {
     htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];

@@ -94,6 +94,7 @@ typedef struct {
     void *pushConstantData;
 } htw_Pipeline;
 
+// TODO: remove underscore or make opaque and prepend 'private'
 typedef struct {
     VkBuffer buffer;
     VkMemoryRequirements deviceMemoryRequirements;
@@ -109,6 +110,7 @@ typedef struct {
     VkDeviceSize _subBufferDeviceSize;
 } htw_SplitBuffer;
 
+// TODO: remove underscore or make opaque and prepend 'private'
 typedef struct {
     u32 maxCount;
     u32 currentCount;
@@ -265,6 +267,15 @@ void htw_beginFrame(htw_VkContext *vkContext);
 void htw_bindPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle);
 void htw_bindDescriptorSet(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_DescriptorSet descriptorSet, htw_DescriptorBindingFrequency bindFrequency);
 void htw_pushConstants(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, void *pushConstantData);
+
+/**
+ * @brief Convenience method to set model position in pipelines that use a 128 bit [pv, m] push constant layout. Will work as intended ONLY for pipelines with this layout.
+ *
+ * @param vkContext p_vkContext:...
+ * @param pipelineHandle p_pipelineHandle:...
+ * @param modelMatrix 4x4 float matrix with the same layout as GLSL mat4x4
+ */
+void htw_setModelTransform(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, void *modelMatrix);
 void htw_drawPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_ModelData *modelData, htw_DrawFlags drawFlags);
 void htw_endFrame(htw_VkContext *vkContext);
 void htw_resizeWindow(htw_VkContext *vkContext, int width, int height);

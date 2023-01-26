@@ -140,7 +140,7 @@ typedef struct {
     u32 vertexCount;
     u32 indexCount;
     u32 instanceCount;
-} htw_ModelData;
+} htw_MeshBufferSet;
 
 typedef struct {
     VkFormat format;
@@ -276,7 +276,7 @@ void htw_pushConstants(htw_VkContext *vkContext, htw_PipelineHandle pipelineHand
  * @param modelMatrix 4x4 float matrix with the same layout as GLSL mat4x4
  */
 void htw_setModelTransform(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, void *modelMatrix);
-void htw_drawPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_ModelData *modelData, htw_DrawFlags drawFlags);
+void htw_drawPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_MeshBufferSet *meshBufferSet, htw_DrawFlags drawFlags);
 void htw_endFrame(htw_VkContext *vkContext);
 void htw_resizeWindow(htw_VkContext *vkContext, int width, int height);
 void htw_destroyVkContext(htw_VkContext *vkContext);

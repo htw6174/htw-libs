@@ -320,7 +320,7 @@ void htw_setModelTransform(htw_VkContext *vkContext, htw_PipelineHandle pipeline
     }
 }
 
-void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHandle, htw_ModelData *modelData, htw_DrawFlags drawFlags)
+void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHandle, htw_MeshBufferSet *meshBufferSet, htw_DrawFlags drawFlags)
 {
     htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
     VkCommandBuffer cmd = vkContext->swapchainImages[vkContext->currentImageIndex].commandBuffer;
@@ -334,18 +334,18 @@ void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHand
     VkDeviceSize offsets[] = {0};
     uint32_t instanceCount = 1;
     if ((drawFlags & HTW_DRAW_TYPE_POINTS) == HTW_DRAW_TYPE_POINTS) {
-        vkCmdBindVertexBuffers(cmd, 0, 1, &modelData->vertexBuffer->buffer, offsets);
+        vkCmdBindVertexBuffers(cmd, 0, 1, &meshBufferSet->vertexBuffer->buffer, offsets);
     }
     if ((drawFlags & HTW_DRAW_TYPE_INSTANCED) == HTW_DRAW_TYPE_INSTANCED) {
-        instanceCount = modelData->instanceCount;
-        vkCmdBindVertexBuffers(cmd, 0, 1, &modelData->instanceBuffer->buffer, offsets);
+        instanceCount = meshBufferSet->instanceCount;
+        vkCmdBindVertexBuffers(cmd, 0, 1, &meshBufferSet->instanceBuffer->buffer, offsets);
     }
     if ((drawFlags & HTW_DRAW_TYPE_INDEXED) == HTW_DRAW_TYPE_INDEXED) {
-        vkCmdBindIndexBuffer(cmd, modelData->indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd, modelData->indexCount, instanceCount, 0, 0, 0);
+        vkCmdBindIndexBuffer(cmd, meshBufferSet->indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(cmd, meshBufferSet->indexCount, instanceCount, 0, 0, 0);
     }
     else {
-        vkCmdDraw(cmd, modelData->vertexCount, instanceCount, 0, 0);
+        vkCmdDraw(cmd, meshBufferSet->vertexCount, instanceCount, 0, 0);
     }
 }
 

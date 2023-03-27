@@ -36,6 +36,21 @@ void htw_geo_fillGradient(htw_ValueMap *map, int gradStart, int gradEnd ) {
     }
 }
 
+void htw_geo_fillCircularGradient(htw_ValueMap* map, htw_geo_GridCoord center, s32 gradStart, s32 gradEnd, float radius) {
+    gradStart = min_int(gradStart, map->maxMagnitude);
+    gradEnd = min_int(gradEnd, map->maxMagnitude);
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            float distance = htw_geo_hexGridDistance(center, (htw_geo_GridCoord){x, y});
+            int gradValue = 0;
+            if (distance < radius) {
+                gradValue = lerp_int(gradEnd, gradStart, (radius - distance) / radius);
+            }
+            htw_geo_setMapValue(map, (htw_geo_GridCoord){x, y}, gradValue);
+        }
+    }
+}
+
 void htw_geo_fillNoise(htw_ValueMap* map, u32 seed) {
     for (u32 y = 0; y < map->height; y++) {
         for (u32 x = 0; x < map->width; x++) {
@@ -85,4 +100,20 @@ void htw_geo_fillSimplex(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32
             htw_geo_setMapValue(map, (htw_geo_GridCoord){x, y}, val);
         }
     }
+}
+
+s32 htw_geo_circularGradientByGridCoord(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, htw_geo_GridCoord center, s32 gradStart, s32 gradEnd, float radius) {
+    float distance = htw_geo_hexCartesianDistance(chunkMap, cellCoord, center);
+    s32 gradValue = 0;
+    if (distance < radius) {
+        gradValue = lerp_int(gradEnd, gradStart, (radius - distance) / radius);
+    }
+    return gradValue;
+}
+
+float htw_geo_simplex(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, u32 seed, u32 octaves, u32 samplesPerRepeat) {
+    float scale = (float)samplesPerRepeat / chunkMap->mapWidth;
+    float scaledX = cellCoord.x * scale;
+    float scaledY = cellCoord.y * scale;
+    return htw_simplex2dLayered(seed, scaledX, scaledY, samplesPerRepeat, octaves);
 }

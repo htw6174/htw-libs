@@ -24,7 +24,7 @@ unsigned int htw_nextPow(unsigned int value) {
         if (low) highestbit = i;
         value = value >> 1;
     }
-    // increase to next power of 2 if
+    // increase to next power of 2 if original value is not already a power of 2
     if (onbits > 1) highestbit++;
     return 1 << highestbit;
 }

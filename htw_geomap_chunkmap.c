@@ -1,3 +1,6 @@
+/* TODO: consider removing void* cell data in favor of macro-based custom types; direct access to cell data would be slightly faster and more convenient, but passing around custom chunkmap references would be less convenient
+ * Advantage of not using custom type macros: source files working with chunkmaps don't need to know what kind of data they contain, if all it cares about is relative position or passing a celldata reference to something else
+ */
 #include <math.h>
 #include "htw_geomap.h"
 #include "htw_core.h"

@@ -325,11 +325,6 @@ void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHand
     htw_Pipeline currentPipeline = vkContext->pipelines[pipelineHandle];
     VkCommandBuffer cmd = vkContext->swapchainImages[vkContext->currentImageIndex].commandBuffer;
 
-    // push constants
-    // if (currentPipeline.pushConstantSize > 0) {
-    //     vkCmdPushConstants(cmd, currentPipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, currentPipeline.pushConstantSize, currentPipeline.pushConstantData);
-    // }
-
     // draw vertices
     VkDeviceSize offsets[] = {0};
     uint32_t instanceCount = 1;
@@ -346,6 +341,25 @@ void htw_drawPipeline (htw_VkContext* vkContext, htw_PipelineHandle pipelineHand
     }
     else {
         vkCmdDraw(cmd, meshBufferSet->vertexCount, instanceCount, 0, 0);
+    }
+}
+
+void htw_setModelTranslationInstances(htw_VkContext *vkContext, float *modelTranslations) {
+    memcpy(vkContext->modelTranslationInstances, modelTranslations, 12 * sizeof(float));
+}
+
+void htw_drawPipelineX4(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_MeshBufferSet *meshBufferSet, htw_DrawFlags drawFlags, float *modelMatrix) {
+    static float transformedMatrix[4][4] = {0};
+    for (int i = 0; i < 4; i++) {
+        // Add modelTranslation to modelMatrix
+        memcpy(&transformedMatrix, modelMatrix, 16 * sizeof(float));
+        transformedMatrix[3][0] += vkContext->modelTranslationInstances[3 * i];
+        transformedMatrix[3][1] += vkContext->modelTranslationInstances[(3 * i) + 1];
+        transformedMatrix[3][2] += vkContext->modelTranslationInstances[(3 * i) + 2];
+        // Push transformed matrix
+        htw_setModelTransform(vkContext, pipelineHandle, &transformedMatrix);
+        // Draw pipeline
+        htw_drawPipeline(vkContext, pipelineHandle, meshBufferSet, drawFlags);
     }
 }
 

@@ -204,6 +204,9 @@ typedef struct {
     VkSemaphore *aquiredImageSemaphores;
     VkFence *aquiredImageFences;
 
+    // Intended to allow drawing the same pipeline with 4 different translations in one call
+    float modelTranslationInstances[12]; // Vec3[4]
+
 } htw_VkContext;
 
 htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow);
@@ -277,6 +280,25 @@ void htw_pushConstants(htw_VkContext *vkContext, htw_PipelineHandle pipelineHand
  */
 void htw_setModelTransform(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, void *modelMatrix);
 void htw_drawPipeline(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_MeshBufferSet *meshBufferSet, htw_DrawFlags drawFlags);
+
+/**
+ * @brief Set translation offsets to use with drawPipelineX4
+ *
+ * @param vkContext p_vkContext:...
+ * @param modelTranslations pointer to array of at least 12 floats. If using a vector library with struct types, can also pass pointer to an array of 4 vec3s
+ */
+void htw_setModelTranslationInstances(htw_VkContext *vkContext, float *modelTranslations);
+/**
+ * @brief Calls setModelTransform and drawPipeline 4 times, with modelMatrix translated by each of the vectors set with setModelTranslationInstances
+ *
+ * @param vkContext p_vkContext:...
+ * @param pipelineHandle p_pipelineHandle:...
+ * @param meshBufferSet p_meshBufferSet:...
+ * @param drawFlags p_drawFlags:...
+ * @param modelMatrix 4x4 float matrix with the same layout as GLSL mat4x4
+ */
+void htw_drawPipelineX4(htw_VkContext *vkContext, htw_PipelineHandle pipelineHandle, htw_MeshBufferSet *meshBufferSet, htw_DrawFlags drawFlags, float *modelMatrix);
+
 void htw_endFrame(htw_VkContext *vkContext);
 void htw_resizeWindow(htw_VkContext *vkContext, int width, int height);
 void htw_destroyVkContext(htw_VkContext *vkContext);

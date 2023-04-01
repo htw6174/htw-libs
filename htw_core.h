@@ -79,31 +79,6 @@ double inverseLerp_int(int a, int b, int val);
 
 int remap_int(int val, int oldMin, int oldMax, int newMin, int newMax);
 
-/* Generic Lists */
-typedef struct {
-    u32 length;
-    u32 capacity;
-    size_t itemSize;
-    void *items;
-} List;
-
-List *createList (size_t itemSize, u32 initialLength);
-// Returns a new list object that refers to the same set of items as originalList. Resizing the new list... ?
-List *sliceList(List *originalList, u32 startIndex, u32 sliceLength);
-// Frees both the list object and the inner array
-void destroyList(List *list);
-
-// index must be less than list.length
-void *getItem(List *list, u32 index);
-// Uses memcpy to insert the value of *newItem at list[index]
-void setItem(List *list, u32 index, void *newItem);
-// Returns the index of the newly added item. Will expand the list if there is no available capacity.
-u32 pushItem(List *list, void *newItem);
-// Returns a pointer to the last item in the list, then shrinks the list. The caller is responsible for using the return value before assigning something else to the end of the list.
-void *popItem(List *list);
-
-void printList(List *list, void(*print)(void*));
-
 // TODO
 /** Generic object pools
  * Allows for frequent reuse of objects without reallocation of memory. Creating a pool allocates enough space for n objects once. The pool keeps track of which pool items are in use/not in use. Requesting a new object from the pool returns the pointer to an unused item, and marks that item as in use. Telling the pool to destroy an object marks it as unused. Destroying the pool frees all items from memory.

@@ -5,7 +5,7 @@ project(htw LANGUAGES C)
 add_compile_definitions($<$<CONFIG:Debug>:DEBUG>)
 #add_compile_definitions($<$<CONFIG:Debug>:VK_DEBUG>) # use to enable Vulkan validation layers
 
-add_library(htw SHARED htw_core_math.c htw_core_collections.c htw_geomap_tiles.c htw_geomap_chunkmap.c htw_geomap_hexgrid.c htw_geomap_tilemap.c htw_geomap_valuemap.c htw_geomap_generators.c htw_geomap_spatialStorage.c htw_vulkan.c)
+add_library(htw SHARED htw_core_math.c htw_geomap_chunkmap.c htw_geomap_hexgrid.c htw_geomap_tilemap.c htw_geomap_valuemap.c htw_geomap_generators.c htw_geomap_spatialStorage.c htw_vulkan.c)
 
 find_package(SDL2 REQUIRED)
 find_package(Vulkan REQUIRED)

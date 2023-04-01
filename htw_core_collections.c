@@ -1,8 +1,34 @@
+/* Not ready for use right now, should rework to use macros or use klib generics instead */
 #include <stdio.h>
 #include <string.h>
 #include "htw_core.h"
 
 #define GET_ITEM_POINTER(list, index) (list->items + (index * list->itemSize))
+
+/* Generic Lists */
+typedef struct {
+    u32 length;
+    u32 capacity;
+    size_t itemSize;
+    void *items;
+} List;
+
+List *createList (size_t itemSize, u32 initialLength);
+// Returns a new list object that refers to the same set of items as originalList. Resizing the new list... ?
+List *sliceList(List *originalList, u32 startIndex, u32 sliceLength);
+// Frees both the list object and the inner array
+void destroyList(List *list);
+
+// index must be less than list.length
+void *getItem(List *list, u32 index);
+// Uses memcpy to insert the value of *newItem at list[index]
+void setItem(List *list, u32 index, void *newItem);
+// Returns the index of the newly added item. Will expand the list if there is no available capacity.
+u32 pushItem(List *list, void *newItem);
+// Returns a pointer to the last item in the list, then shrinks the list. The caller is responsible for using the return value before assigning something else to the end of the list.
+void *popItem(List *list);
+
+void printList(List *list, void(*print)(void*));
 
 List *createList(size_t itemSize, u32 initialLength) {
     void *items = malloc(itemSize * initialLength);

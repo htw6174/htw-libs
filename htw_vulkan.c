@@ -66,9 +66,13 @@ htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow) {
     context->height = (uint32_t)height;
 
     // get number of required extensions
-    unsigned int extraExtensionCount = 2;
-    // TODO: only enable debug extensions when building in debug
-    const char *extraExtensions[] = {VK_EXT_DEBUG_REPORT_EXTENSION_NAME, VK_KHR_DISPLAY_EXTENSION_NAME};
+#ifdef VK_DEBUG
+    unsigned int extraExtensionCount = 1;
+    const char *extraExtensions[] = {VK_EXT_DEBUG_REPORT_EXTENSION_NAME};
+#else
+    unsigned int extraExtensionCount = 0;
+    const char *extraExtensions[] = {};
+#endif
     // get number of extensions to load for SDL
     unsigned int sdlRequiredExtensionCount;
     SDL_Vulkan_GetInstanceExtensions(sdlWindow, &sdlRequiredExtensionCount, NULL);
@@ -89,7 +93,6 @@ htw_VkContext *htw_createVkContext(SDL_Window *sdlWindow) {
     }
 #endif
 
-    // enable layers for validation TODO: only in debug
     uint32_t supportedLayerCount;
     vkEnumerateInstanceLayerProperties(&supportedLayerCount, NULL);
     VkLayerProperties layerProperties[supportedLayerCount];
@@ -1546,16 +1549,26 @@ void initSwapchain(htw_VkContext *vkContext, uint32_t maxAquiredImages) {
     VkSurfaceCapabilitiesKHR surfaceProperties;
     VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vkContext->gpu, vkContext->surface, &surfaceProperties));
 
-    VkSurfaceFormatKHR format;
+    VkSurfaceFormatKHR format = {.format = VK_FORMAT_UNDEFINED};
     uint32_t formatCount;
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vkContext->gpu, vkContext->surface, &formatCount, NULL));
     VkSurfaceFormatKHR formats[formatCount];
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vkContext->gpu, vkContext->surface, &formatCount, formats));
-    // TODO: ensure that the platform supports one of the application's required formats
-    // for now, just assume that the first format is OK
-    format = formats[0];
-    // decent default format:
-    // format.format = VK_FORMAT_R8G8B8A8_UNORM;
+    // See here for some guidance on how to choose format: https://community.khronos.org/t/noob-difference-between-unorm-and-srgb/106132/6
+    // To summarize, should ensure that .format and .colorspace match i.e. both should be either SRGB or UNORM. SRGB is preferred.
+    // TODO: expand range of allowed formats. For now, requires an exact match
+    // FIXME: colors don't look right unless using a UNORM color format, however this is the opposite of what I expected
+    for (int i = 0; i < formatCount; i++) {
+        if (formats[i].format == VK_FORMAT_B8G8R8A8_UNORM && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            format = formats[i];
+            break;
+        }
+    }
+    if (format.format == VK_FORMAT_UNDEFINED) {
+        // No supported format found, use fallback
+        fprintf(stderr, "No colorspace format found matching app requirements, using fallback");
+        format = formats[0];
+    }
 
     // TODO: full of hardcoded values, figure out what all of these do
     VkSwapchainCreateInfoKHR swapchainInfo = {

@@ -79,6 +79,35 @@ double inverseLerp_int(int a, int b, int val);
 
 int remap_int(int val, int oldMin, int oldMax, int newMin, int newMax);
 
+/* Simple file handling utilities */
+static const int HTW_FILE_LOAD_MAX_LENGTH = 1024*1024;
+
+// Simply free the result when you're done with it
+static char* htw_load(char* path);
+
+static char* htw_load(char* path) {
+    FILE *fp = fopen(path, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Failed to open %s\n", path);
+        return NULL;
+    }
+
+    char* contents = calloc(HTW_FILE_LOAD_MAX_LENGTH, sizeof(char));
+    size_t i = 0;
+    char c;
+    while((c = getc(fp)) != EOF) {
+        contents[i++] = c;
+        if (i == HTW_FILE_LOAD_MAX_LENGTH) {
+            contents[i - 1] = 0;
+            fprintf(stderr, "Reached max readable length for file %s\n", path);
+            break;
+        }
+    }
+
+    fclose(fp);
+    return contents;
+}
+
 // TODO
 /** Generic object pools
  * Allows for frequent reuse of objects without reallocation of memory. Creating a pool allocates enough space for n objects once. The pool keeps track of which pool items are in use/not in use. Requesting a new object from the pool returns the pointer to an unused item, and marks that item as in use. Telling the pool to destroy an object marks it as unused. Destroying the pool frees all items from memory.

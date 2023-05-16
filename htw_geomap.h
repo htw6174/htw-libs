@@ -140,6 +140,7 @@ void *htw_geo_getCell(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord);
 u32 htw_geo_getChunkIndexByChunkCoordinates(htw_ChunkMap *chunkMap, htw_geo_GridCoord chunkCoord);
 u32 htw_geo_getChunkIndexByGridCoordinates(htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord);
 u32 htw_geo_getChunkIndexAtOffset(htw_ChunkMap *chunkMap, u32 startingChunk, htw_geo_GridCoord chunkOffset);
+htw_geo_GridCoord htw_geo_chunkIndexToChunkCoordinates(htw_ChunkMap *chunkMap, u32 chunkIndex);
 void htw_geo_gridCoordinateToChunkAndCellIndex(htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord, u32 *chunkIndex, u32 *cellIndex);
 htw_geo_GridCoord htw_geo_chunkAndCellToGridCoordinates(htw_ChunkMap *chunkMap, u32 chunkIndex, u32 cellIndex);
 void htw_geo_getChunkRootPosition(htw_ChunkMap *chunkMap, u32 chunkIndex, float *worldX, float *worldY);

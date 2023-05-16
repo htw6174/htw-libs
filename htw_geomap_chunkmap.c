@@ -50,22 +50,23 @@ u32 htw_geo_getChunkIndexByGridCoordinates(htw_ChunkMap *chunkMap, htw_geo_GridC
 }
 
 u32 htw_geo_getChunkIndexAtOffset(htw_ChunkMap *chunkMap, u32 startingChunk, htw_geo_GridCoord chunkOffset) {
-    htw_geo_GridCoord chunkCoord = {
-        .x = startingChunk % chunkMap->chunkCountX,
-        .y = startingChunk / chunkMap->chunkCountX
-    };
+    htw_geo_GridCoord chunkCoord = htw_geo_chunkIndexToChunkCoordinates(chunkMap, startingChunk);
     chunkCoord = htw_geo_addGridCoords(chunkCoord, chunkOffset);
     return htw_geo_getChunkIndexByChunkCoordinates(chunkMap, chunkCoord);
+}
+
+htw_geo_GridCoord htw_geo_chunkIndexToChunkCoordinates(htw_ChunkMap *chunkMap, u32 chunkIndex) {
+    return (htw_geo_GridCoord){
+        .x = chunkIndex % chunkMap->chunkCountX,
+        .y = chunkIndex / chunkMap->chunkCountX
+    };
 }
 
 void htw_geo_gridCoordinateToChunkAndCellIndex(htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord, u32 *chunkIndex, u32 *cellIndex) {
     gridCoord = htw_geo_wrapGridCoordOnChunkMap(chunkMap, gridCoord);
 
     *chunkIndex = htw_geo_getChunkIndexByGridCoordinates(chunkMap, gridCoord);
-    htw_geo_GridCoord chunkCoord = {
-        .x = *chunkIndex % chunkMap->chunkCountX,
-        .y = *chunkIndex / chunkMap->chunkCountX
-    };
+    htw_geo_GridCoord chunkCoord = htw_geo_chunkIndexToChunkCoordinates(chunkMap, *chunkIndex);
     htw_geo_GridCoord cellCoord = {
         .x = gridCoord.x - (chunkCoord.x * chunkMap->chunkSize),
         .y = gridCoord.y - (chunkCoord.y * chunkMap->chunkSize)

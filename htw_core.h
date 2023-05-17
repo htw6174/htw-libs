@@ -52,6 +52,16 @@ static inline void htw_printVectorArray(FILE* dest, void* data, u32 dim, u32 cou
 #define charToInt(c) (int)c - INT_CHAR_OFFSET
 #define intToChar(i) (char)i + INT_CHAR_OFFSET
 
+static inline int htw_strToInt(const char *str) {
+    int sum = 0;
+    int i = 0;
+    char c;
+    while((c = str[i++]) != '\0') {
+        sum = (sum * 10) + charToInt(c);
+    }
+    return sum;
+}
+
 /* Math utilities */
 
 #define PI 3.141592f

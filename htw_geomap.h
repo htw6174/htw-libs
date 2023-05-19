@@ -203,6 +203,16 @@ void htw_geo_fillSimplex(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32
 
 /* For getting single cell values: */
 s32 htw_geo_circularGradientByGridCoord(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, htw_geo_GridCoord center, s32 gradStart, s32 gradEnd, float radius);
+/**
+ * @brief Simplex noise value for single cell on a hexagonal gridmap
+ *
+ * @param chunkMap Reference chunkmap, map size is used to ensure smooth wrapping
+ * @param cellCoord
+ * @param seed
+ * @param octaves Number of cycles to use when computing noise. Higher values will create more detailed noise, but take longer to evaluate
+ * @param samplesPerRepeat Effects size of the first octave. Higher values will create a noiser result
+ * @return float
+ */
 float htw_geo_simplex(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, u32 seed, u32 octaves, u32 samplesPerRepeat);
 
 

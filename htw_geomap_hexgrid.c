@@ -72,6 +72,8 @@ u32 htw_geo_getHexPerimeter(u32 edgeLength) {
 }
 
 // quadratic form of this formula: find area of square enclosing the hexagonal area (edge length = 2n - 1), and subtract the area of the corners that aren't in the hexagon
+// 1 -> 1, 2 -> 7, etc.
+// NOTE: 0 -> 1
 u32 htw_geo_getHexArea(u32 edgeLength) {
     return (3 * (edgeLength * edgeLength)) - (3 * edgeLength) + 1;
 }

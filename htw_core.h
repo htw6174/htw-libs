@@ -93,9 +93,9 @@ int remap_int(int val, int oldMin, int oldMax, int newMin, int newMax);
 static const int HTW_FILE_LOAD_MAX_LENGTH = 1024*1024;
 
 // Simply free the result when you're done with it
-static char* htw_load(char* path);
+static char* htw_load(const char* path);
 
-static char* htw_load(char* path) {
+static char* htw_load(const char* path) {
     FILE *fp = fopen(path, "r");
     if (fp == NULL) {
         fprintf(stderr, "Failed to open %s\n", path);
@@ -113,6 +113,8 @@ static char* htw_load(char* path) {
             break;
         }
     }
+
+    //printf("Loaded %lu bytes from %s\n", i, path);
 
     fclose(fp);
     return contents;

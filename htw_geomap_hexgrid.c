@@ -5,11 +5,19 @@
 
 // similar to Red Blob Game's example (https://www.redblobgames.com/grids/hexagons/), cube (3-axis) hexagon coordinates use (q, r, s) to represent cell position. Skewed (RBG calls this 'axial') coordinates use (x, y) for cell position, because they only differ from cartesian grid coordinates in how they are converted to world space positions, which can be distinguished by the use of int (for grid position) or float (for world position) types
 // In this library, horizontal or 'pointy topped' hexagons arranged with +x skew are always used.
+// There are differences from the redblob examples because of the +x skew: to translate their coordinate system to this one it must be flipped across the r=0 axis
+// For most algorithms these difference don't matter, but it does affect converting from hex/cube coords to cartesian and back
+// Do this flip by swapping q and s, and negating the coord
+// Note that the conversion scale from hex to cartesian is also different from redblob's page
+// Here, the center-to-center distance between hexagons translates to 1 unit in cartesian space, i.e. the width/inner diameter of hexes is 1
+
 // Some alogrithms are easier to implement with cube coordinates
 // When converting between skewed hex and cartesian coordinates: +x is due right, -x is due left, +y is top-right, -y is bottom-left
 // When converting between skewed hex and cube hex coordinates: +/-x = +/-q, +/-y = +/-r, s = -q - r
 // Cube space to world space directions are more complicated, because all movements involve changing 2 dimensions:
 // +q/-s is right, -q/+s is left, +r/-s is top-right, -r/+s is bottom-left, +q/-r is bottom-right, -q/+r is top-left
+// q=0 axis runs from bottom-left to top-right, r=0 axis runs from left to right, and s=0 axis runs from bottom-right to top-left
+// +q is ExSE, +r is due North, +s is WxSW
 // cube coordinates must always adhere to the constraint q + r + s = 0
 
 static inline s32 cube3rdAxis(s32 q, s32 r) {
@@ -32,6 +40,7 @@ htw_geo_GridCoord htw_geo_cubeToGridCoord(htw_geo_CubeCoord cubeCoord) {
     return (htw_geo_GridCoord){cubeCoord.q, cubeCoord.r};
 }
 
+// sqrt(0.75) == sqrt(3)/2
 float htw_geo_cartesianToHexPositionX(float x, float y) {
     return x - (y * (0.5 / sqrt(0.75)));
 }
@@ -62,20 +71,20 @@ void htw_geo_getHexCellPositionSkewed(htw_geo_GridCoord gridCoord, float *xPos, 
 }
 
 void htw_geo_cartesianToHexFractional(float x, float y, float *q, float *r) {
-    // Slightly modified matmul from https://www.redblobgames.com/grids/hexagons/#pixel-to-hex
-    *q = ((sqrt(3.0)/3.0) * x) + ((1.0/3.0) * y);
-    *r = (2.0 / 3.0) * y;
+    *q = x - (y * (0.5 / sqrt(0.75)));
+    *r = y * (1.0 / sqrt(0.75));
 }
 
 htw_geo_GridCoord htw_geo_hexFractionalToHexCoord(float q, float r) {
     // based on https://www.shadertoy.com/view/dtySDy by FordPerfect
     // 3rd fractional cube coord
     float s = -q - r;
-    float qr = floorf(q - r); // 2 * distance along s=0 axis, + to top-right
-    float rs = floorf(r - s); // 2 * distance along q=0 axis, + to bottom-right
-    float sq = floorf(s - q); // 2 * distance along r=0 axis, + to left
-    float qi = -roundf((sq - qr)/3.0);
-    float ri = -roundf((qr - rs)/3.0);
+
+    float qr = floorf(q - r); // 2 * distance along s=0 axis; REDBLOB: + to top-right       MINE: + to bottom-right
+    float rs = floorf(r - s); // 2 * distance along q=0 axis; REDBLOB: + to bottom-right    MINE: + to top-right
+    float sq = floorf(s - q); // 2 * distance along r=0 axis; REDBLOB: + to left            MINE: + to left
+    float qi = roundf((qr - sq)/3.0);
+    float ri = roundf((rs - qr)/3.0);
     return (htw_geo_GridCoord){qi, ri};
 }
 

@@ -61,6 +61,30 @@ void htw_geo_getHexCellPositionSkewed(htw_geo_GridCoord gridCoord, float *xPos, 
     *xPos = gridCoord.x + ((float)gridCoord.y * 0.5);
 }
 
+void htw_geo_cartesianToHexFractional(float x, float y, float *q, float *r) {
+    // Slightly modified matmul from https://www.redblobgames.com/grids/hexagons/#pixel-to-hex
+    *q = ((sqrt(3.0)/3.0) * x) + ((1.0/3.0) * y);
+    *r = (2.0 / 3.0) * y;
+}
+
+htw_geo_GridCoord htw_geo_hexFractionalToHexCoord(float q, float r) {
+    // based on https://www.shadertoy.com/view/dtySDy by FordPerfect
+    // 3rd fractional cube coord
+    float s = -q - r;
+    float qr = floorf(q - r); // 2 * distance along s=0 axis, + to top-right
+    float rs = floorf(r - s); // 2 * distance along q=0 axis, + to bottom-right
+    float sq = floorf(s - q); // 2 * distance along r=0 axis, + to left
+    float qi = -roundf((sq - qr)/3.0);
+    float ri = -roundf((qr - rs)/3.0);
+    return (htw_geo_GridCoord){qi, ri};
+}
+
+htw_geo_GridCoord htw_geo_cartesianToHexCoord(float xCart, float yCart) {
+    float q, r;
+    htw_geo_cartesianToHexFractional(xCart, yCart, &q, &r);
+    return htw_geo_hexFractionalToHexCoord(q, r);
+}
+
 // distance from (0, 0, 0)
 u32 htw_geo_hexMagnitude(htw_geo_CubeCoord cubeCoord) {
     return (abs(cubeCoord.q) + abs(cubeCoord.r) + abs(cubeCoord.s)) / 2;

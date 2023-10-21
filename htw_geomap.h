@@ -175,6 +175,9 @@ float htw_geo_hexToCartesianPositionY(float y);
 float htw_geo_getHexPositionX(s32 gridX, s32 gridY);
 float htw_geo_getHexPositionY(s32 gridY);
 void htw_geo_getHexCellPositionSkewed(htw_geo_GridCoord gridCoord, float *xPos, float *yPos);
+void htw_geo_cartesianToHexFractional(float x, float y, float *q, float *r);
+htw_geo_GridCoord htw_geo_hexFractionalToHexCoord(float q, float r);
+htw_geo_GridCoord htw_geo_cartesianToHexCoord(float x, float y);
 
 u32 htw_geo_hexMagnitude(htw_geo_CubeCoord cubeCoord);
 u32 htw_geo_getHexArea(u32 edgeLength);
@@ -237,5 +240,8 @@ static htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_Grid
 static u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b) {
     return (abs(a.x - b.x) + abs(a.x + a.y - b.x - b.y) + abs(a.y - b.y)) / 2;
 }
+
+// Macro to get position in a hex direction
+#define POSITION_IN_DIRECTION(pos, dir) htw_geo_addGridCoords(pos, htw_geo_hexGridDirections[dir])
 
 #endif

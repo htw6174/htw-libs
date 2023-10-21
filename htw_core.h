@@ -67,6 +67,9 @@ static inline int htw_strToInt(const char *str) {
 #define PI 3.141592f
 #define DEG_TO_RAD 0.017453f
 
+/// Gives the correct result when a is negative
+#define MOD(a, b) ((((a)%(b))+(b))%(b))
+
 inline int min_int(int a, int b) {
     return a < b ? a : b;
 }

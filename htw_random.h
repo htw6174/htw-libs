@@ -20,6 +20,11 @@ static inline int htw_randRange(int range) {
     return rand() % range;
 }
 
+/// Random float in (0, 1)
+static inline float htw_randNormal() {
+    return (float)rand() / (float)RAND_MAX;
+}
+
 /**
  * @brief Roll The Dice; get total and/or individual results for [count] dice rolls. Result for each roll will be in the range [1, sides]
  *

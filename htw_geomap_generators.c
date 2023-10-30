@@ -26,8 +26,8 @@ void htw_geo_fillChecker(htw_ValueMap *map, s32 value1, s32 value2, u32 gridOrde
 }
 
 void htw_geo_fillGradient(htw_ValueMap *map, int gradStart, int gradEnd ) {
-    gradStart = min_int( gradStart, map->maxMagnitude);
-    gradEnd = min_int( gradEnd, map->maxMagnitude);
+    gradStart = MIN(gradStart, map->maxMagnitude);
+    gradEnd = MIN(gradEnd, map->maxMagnitude);
     for (int y = 0; y < map->height; y++) {
         int gradCurrent = lerp_int( gradStart, gradEnd, (double)y / map->height );
         for (int x = 0; x < map->width; x++) {
@@ -37,8 +37,8 @@ void htw_geo_fillGradient(htw_ValueMap *map, int gradStart, int gradEnd ) {
 }
 
 void htw_geo_fillCircularGradient(htw_ValueMap* map, htw_geo_GridCoord center, s32 gradStart, s32 gradEnd, float radius) {
-    gradStart = min_int(gradStart, map->maxMagnitude);
-    gradEnd = min_int(gradEnd, map->maxMagnitude);
+    gradStart = MIN(gradStart, map->maxMagnitude);
+    gradEnd = MIN(gradEnd, map->maxMagnitude);
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
             float distance = htw_geo_hexGridDistance(center, (htw_geo_GridCoord){x, y});

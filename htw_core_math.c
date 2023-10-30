@@ -1,8 +1,7 @@
 #include "htw_core.h"
+#include <math.h>
 
-extern inline int min_int(int a, int b);
-
-extern inline int max_int(int a, int b);
+// NOTE: the <sys/param.h> header contains some other useful macros, but unsure if they are portable
 
 int htw_align(int value, int alignment) {
     int aligned = value; // return same size if it fits cleanly
@@ -15,18 +14,11 @@ int htw_align(int value, int alignment) {
 }
 
 unsigned int htw_nextPow(unsigned int value) {
-    unsigned int onbits = 0;
-    unsigned int highestbit = 0;
-    // check each bit to find the highest 1 bit, and the total number of 1 bits
-    for (int i = 0; i < 32; i++) {
-        unsigned int low = value & 1;
-        onbits += low;
-        if (low) highestbit = i;
-        value = value >> 1;
+    if IS_POW_OF_2(value) {
+        return value;
+    } else {
+        return ceil(log2(value));
     }
-    // increase to next power of 2 if original value is not already a power of 2
-    if (onbits > 1) highestbit++;
-    return 1 << highestbit;
 }
 
 float lerp(float a, float b, float progress) {
@@ -47,6 +39,7 @@ double inverseLerp_int(int a, int b, int val) {
 }
 
 int remap_int(int val, int oldMin, int oldMax, int newMin, int newMax) {
+
     double prog = inverseLerp_int(oldMin, oldMax, val);
     return lerp_int(newMin, newMax, prog);
 }

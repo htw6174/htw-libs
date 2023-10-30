@@ -101,7 +101,7 @@ u32 htw_geo_hexMagnitude(htw_geo_CubeCoord cubeCoord) {
 
 // perimeter given in cells. edgeLength 0 is undefined.
 u32 htw_geo_getHexPerimeter(u32 edgeLength) {
-    return max_int(6 * (edgeLength - 1), 1);
+    return MAX(6 * (edgeLength - 1), 1);
 }
 
 // quadratic form of this formula: find area of square enclosing the hexagonal area (edge length = 2n - 1), and subtract the area of the corners that aren't in the hexagon

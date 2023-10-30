@@ -17,11 +17,11 @@ typedef int32_t s32;
 typedef int64_t s64;
 
 /* Debug utilities */
-#define HTW_STOPWATCH(x) { clock_t start = clock(); \
+#define HTW_STOPWATCH(x) { clock_t stopwatch__start = clock(); \
                     x; \
-                    clock_t end = clock(); \
-                    float seconds = (float)(end - start) / CLOCKS_PER_SEC; \
-                    printf("%s finished in %.3f seconds / %li ticks\n", #x, seconds, end - start); }
+                    clock_t stopwatch__end = clock(); \
+                    float stopwatch__seconds = (float)(stopwatch__end - stopwatch__start) / CLOCKS_PER_SEC; \
+                    printf("%s finished in %.3f seconds / %li ticks\n", #x, stopwatch__seconds, stopwatch__end - stopwatch__start); }
 
 static inline void htw_printArray(FILE* dest, void* data, u32 size, u32 count, u32 valuesPerLine, char* format) {
     for (int i = 0; i < count; i++) {
@@ -64,19 +64,38 @@ static inline int htw_strToInt(const char *str) {
 
 /* Math utilities */
 
-#define PI 3.141592f
-#define DEG_TO_RAD 0.017453f
+#define EULER           2.7182818284590452354f
+#define PI              3.14159265358979323846f
+#define TAU             6.28318530718f
+#define DEG_TO_RAD      0.0174532925199f
+#define RAD_TO_DEG      57.2957795131f
 
-/// Gives the correct result when a is negative
+/// a % b, but gives the correct result when a is negative
 #define MOD(a, b) ((((a)%(b))+(b))%(b))
 
-inline int min_int(int a, int b) {
-    return a < b ? a : b;
-}
+/// Branchless sign. NOTE: SIGN(0) = 0
+#define SIGN(x) (((x) > 0) - ((x) < 0))
 
-inline int max_int(int a, int b) {
-    return a > b ? a : b;
-}
+/*
+ * NOTE: These MIN/MAX definitions are vulnerable to multiple evaluation. Could instead use a compound statement:
+ * #define max(a,b) \
+ * ( { __typeof__ (a) _a = *(a); \
+ * __typeof__ (b) _b = (b); \
+ * _a > _b ? _a : _b; })
+ *
+ * There are 2 issues with this approach however:
+ * - __typeof__ is GCC-specific, and widely supported, but not universal
+ * - Can cause variable shadowing, which would invalidate the definition of CLAMP below
+ */
+
+/// WARNING: multiple evaluation
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+/// WARNING: multiple evaluation
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+/// WARNING: multiple evaluation
+#define CLAMP(x, min, max) MAX(min, MIN(x, max))
+
+#define IS_POW_OF_2(x) ((((x) - 1) & (x)) == 0)
 
 // returns the smallest multiple of alignment which is >= value
 int htw_align(int value, int alignment);

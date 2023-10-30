@@ -97,17 +97,45 @@ static inline int htw_strToInt(const char *str) {
 
 #define IS_POW_OF_2(x) ((((x) - 1) & (x)) == 0)
 
-// returns the smallest multiple of alignment which is >= value
+/// returns the smallest multiple of alignment which is >= value
 int htw_align(int value, int alignment);
 
-// returns the smallest power of 2 which is >= value
+/// returns the smallest power of 2 which is >= value
 unsigned int htw_nextPow(unsigned int value);
 
-float lerp(float a, float b, float progress);
+/// unbounded lerp
+double lerp(double a, double b, double progress);
+
+/// lerp with result clamped to [a, b]
+double lerpClamp(double a, double b, double progress);
+
+/**
+ * @brief The progress of value from a to b.
+ * If value is between a and b, return is between 0 and 1
+ *
+ * @param a p_a:...
+ * @param b p_b:...
+ * @param value p_value:...
+ * @return double
+ */
+double inverseLerp(double a, double b, double value);
 
 int lerp_int(int a, int b, double prog);
 
 double inverseLerp_int(int a, int b, int val);
+
+/**
+ * @brief Remap value from one range to another.
+ * Same as inverseLerp from old range, then lerp to new range
+ *
+ * @param value p_value:...
+ * @param oldMin p_oldMin:...
+ * @param oldMax p_oldMax:...
+ * @param newMin p_newMin:...
+ * @param newMax p_newMax:...
+ * @return double
+ */
+double remap(double value, double oldMin, double oldMax, double newMin, double newMax);
 
 int remap_int(int val, int oldMin, int oldMax, int newMin, int newMax);
 

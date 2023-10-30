@@ -39,12 +39,12 @@ int htw_rtd(int count, int sides, int *results) {
     int total = 0;
     if (results == NULL) {
         for (int i = 0; i < count; i++) {
-            total += htw_randInt(sides) + 1;
+            total += htw_randIndex(sides) + 1;
         }
     }
     else {
         for (int i = 0; i < count; i++) {
-            int r = htw_randInt(sides) + 1;
+            int r = htw_randIndex(sides) + 1;
             results[i] = r;
             total += r;
         }
@@ -373,12 +373,12 @@ float htw_randPERT(float min, float max, float mode) {
 #define XXH_PRIME32_5  0x165667B1U  /*!< 0b00010110010101100110011110110001 */
 
 /// internal
-u32 xxh_rotateLeft(u32 value, s32 count) {
+static inline u32 xxh_rotateLeft(u32 value, s32 count) {
     return (value << count) | (value >> (32 - count));
 }
 
 /// internal
-inline u32 xxh_bytesToU32(const u8 *bytes) {
+static inline u32 xxh_bytesToU32(const u8 *bytes) {
     u32 value = *bytes;
     value |= (u32)(*(bytes + 1)) << 8;
     value |= (u32)(*(bytes + 2)) << 16;
@@ -387,7 +387,7 @@ inline u32 xxh_bytesToU32(const u8 *bytes) {
 }
 
 /// internal
-inline u32 xxh_subHash(u32 value, const u8 *bytes) {
+static inline u32 xxh_subHash(u32 value, const u8 *bytes) {
     u32 word = xxh_bytesToU32(bytes);
     value += word * XXH_PRIME32_2;
     value = xxh_rotateLeft(value, 13);

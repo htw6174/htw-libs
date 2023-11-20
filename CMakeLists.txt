@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.13)
 
 project(htw LANGUAGES C)
 
@@ -13,4 +13,7 @@ endif (HTW_STATIC)
 set(INCLUDE ${PROJECT_SOURCE_DIR}/include)
 
 add_subdirectory(src)
-add_subdirectory(test)
+
+if (HTW_BUILD_TESTS)
+    add_subdirectory(test)
+endif (HTW_BUILD_TESTS)

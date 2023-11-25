@@ -27,16 +27,11 @@
 #include <stdint.h>
 #include "htw_core.h"
 
-#define HTW_GEO_TILE_NAME_MAX_LENGTH 256
-
-typedef struct {
-    int id;
-    void *content;
-} htw_geo_MapTile;
-
-// Deprecated; may use for an indexed tile system later
-void *htw_geo_loadTileDefinitions (char *path);
-char *htw_geo_getTileName (int id);
+// useful constants; based on distance between 2 adjacent hex centers == 1
+static const float htw_geo_HexOuterRadius = 0.57735026919; // distance from center to corner = sqrt(0.75) * (2.0 / 3.0);
+static const float htw_geo_HexInnerRadius = 0.5; // distance from center to edge
+static const float htw_geo_HexEdgeLength = htw_geo_HexInnerRadius;
+static const float htw_geo_HexHalfEdgeLength = htw_geo_HexEdgeLength / 2;
 
 typedef struct {
     s32 x;
@@ -67,6 +62,16 @@ static const htw_geo_GridCoord htw_geo_hexGridDirections[] = {
     (htw_geo_GridCoord){-1, 1},
 };
 
+/// For a 'unit' inner diameter = 1 hex. Starts at top middle, runs clockwise
+static const float htw_geo_hexCornerPositions[6][2] = {
+    {0.0, htw_geo_HexOuterRadius},
+    {htw_geo_HexInnerRadius, htw_geo_HexHalfEdgeLength},
+    {htw_geo_HexInnerRadius, -htw_geo_HexHalfEdgeLength},
+    {0.0, -htw_geo_HexOuterRadius},
+    {-htw_geo_HexInnerRadius, -htw_geo_HexHalfEdgeLength},
+    {-htw_geo_HexInnerRadius, htw_geo_HexHalfEdgeLength},
+};
+
 /** Corresponds to the locations below on a square grid:
  * 5 0 -
  * 4 - 1
@@ -84,17 +89,24 @@ enum hexDirection {
     HEX_DIRECTION_COUNT // Limit for iterating over values in this enum
 };
 
+/** Starts from the top and winds around clockwise
+ *
+ * Also corresponds to elements of htw_geo_hexCornerPositions
+ */
+enum hexCorner {
+    HEX_CORNER_NORTH = 0,
+    HEX_CORNER_NORTH_EAST,
+    HEX_CORNER_SOUTH_EAST,
+    HEX_CORNER_SOUTH,
+    HEX_CORNER_SOUTH_WEST,
+    HEX_CORNER_NORTH_WEST,
+    HEX_CORNER_COUNT // Limit for iterating over values in this enum
+};
+
 // Note on 'striped' vs 'chunked' layout for map tiles in memory:
 // 'striped' can be most performant for iterating over every tile in the map in order
 // 'chunked' (minecraft-like) can be most performant for operating on smaller parts of the map at a time (e.g. 3x3 cookie that moves over a local area)
 // As the map size increases, striped layouts should fall farther behind chunked, in the areas where the chunked approach excels
-typedef struct {
-    int width;
-    int height;
-    // Left to right, then top to bottom
-    htw_geo_MapTile *tiles;
-} htw_TileMap;
-
 typedef struct {
     void *cellData;
 } htw_Chunk;
@@ -128,12 +140,6 @@ typedef struct {
 } htw_SpatialStorage;
 
 // Allocates a map and enough space for all map elements
-// TODO: remove this or replace it with a generic void* version of value maps
-htw_TileMap *createTileMap(uint32_t width, uint32_t height);
-htw_geo_MapTile *getMapTile(htw_TileMap *map, int x, int y);
-void setMapTile(htw_TileMap *map, htw_geo_MapTile tile, int x, int y);
-void printTileMap(htw_TileMap *map);
-
 htw_ChunkMap *htw_geo_createChunkMap(u32 chunkSize, u32 chunkCountX, u32 chunkCountY, size_t cellDataSize);
 // NOTE: no out of bounds access possible through these methods, coordinates always wrap based on map size
 void *htw_geo_getCell(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord);

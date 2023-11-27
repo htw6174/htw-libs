@@ -468,21 +468,6 @@ u32 xxh_hash(u32 seed, size_t size, const u8 *bytes) {
 
 /* 2D Noise */
 
-float htw_smoothCurve(float v) {
-    return v * v * (3.0 - 2.0 * v);
-}
-
-float htw_smootherCurve(float v) {
-    return v * v * v * (v * (v * 6.0 - 15.0) + 10.0);
-}
-
-// Not sure where this one came from or what it has to do with surflets!
-// Similar to 1 - smoothstep() between 0 and 0.7, then increases sharply through and past f(1) = 1
-float private_htw_surfletCurve(float v) {
-    v = 0.5 - (v * v);
-    return v * v * v * v * 16.0;
-}
-
 float htw_value2d(u32 seed, float sampleX, float sampleY) {
     float integralX, integralY;
     float fractX = modff(sampleX, &integralX);

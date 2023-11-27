@@ -125,25 +125,6 @@ u32 xxh_hash(u32 seed, size_t length, const u8 *bytes);
  * @{
  */
 
-//
-/**
- * @brief Hermite curve, 3t^2 - 2t^3. Identical to glsl smoothstep in [0, 1]
- * NOTE: for inputs outside [0, 1], this continues in the opposite direction i.e. -x^3
- *
- * @param v from 0 to 1
- * @return float
- */
-float htw_smoothCurve(float v);
-
-/**
- * @brief Very similar to a Hermite curve, but with continuous derivative when clamped to [0, 1]
- * NOTE: for inputs outside [0, 1], this continues in the same direction i.e. x^5
- *
- * @param v p_v:...
- * @return float
- */
-float htw_smootherCurve(float v);
-
 // Value noise
 float htw_value2d(u32 seed, float sampleX, float sampleY);
 

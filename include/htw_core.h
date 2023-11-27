@@ -139,6 +139,30 @@ double remap(double value, double oldMin, double oldMax, double newMin, double n
 
 int remap_int(int val, int oldMin, int oldMax, int newMin, int newMax);
 
+/**
+ * @brief Hermite curve, 3t^2 - 2t^3. Identical to glsl smoothstep in [0, 1]
+ * NOTE: for inputs outside [0, 1], this continues in the opposite direction i.e. -x^3
+ *
+ * @param v from 0 to 1
+ * @return float
+ */
+float htw_smoothCurve(float v);
+
+/**
+ * @brief Very similar to a Hermite curve, but with continuous derivative when clamped to [0, 1]
+ * NOTE: for inputs outside [0, 1], this continues in the same direction i.e. x^5
+ *
+ * @param v p_v:...
+ * @return float
+ */
+float htw_smootherCurve(float v);
+
+// Identical to glsl smoothstep
+float htw_smoothstep(float edge0, float edge1, float x);
+
+/// Smoothstep with continuous derivative at x = edge0 and x = edge1
+float htw_smootherstep(float edge0, float edge1, float x);
+
 /* Simple file handling utilities */
 static const int HTW_FILE_LOAD_MAX_LENGTH = 1024*1024;
 

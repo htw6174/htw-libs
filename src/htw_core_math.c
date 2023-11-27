@@ -58,3 +58,30 @@ int remap_int(int val, int oldMin, int oldMax, int newMin, int newMax) {
     double prog = inverseLerp_int(oldMin, oldMax, val);
     return lerp_int(newMin, newMax, prog);
 }
+
+float htw_smoothCurve(float v) {
+    return v * v * (3.0 - 2.0 * v);
+}
+
+float htw_smootherCurve(float v) {
+    return v * v * v * (v * (v * 6.0 - 15.0) + 10.0);
+}
+
+// Not sure where this one came from or what it has to do with surflets!
+// Similar to 1 - smoothstep() between 0 and 0.7, then increases sharply through and past f(1) = 1
+float private_htw_surfletCurve(float v) {
+    v = 0.5 - (v * v);
+    return v * v * v * v * 16.0;
+}
+
+float htw_smoothstep(float edge0, float edge1, float x) {
+    x = (x - edge0) / (edge1 - edge0);
+    x = CLAMP(x, 0.0, 1.0);
+    return htw_smoothCurve(x);
+}
+
+float htw_smootherstep(float edge0, float edge1, float x) {
+    x = (x - edge0) / (edge1 - edge0);
+    x = CLAMP(x, 0.0, 1.0);
+    return htw_smootherCurve(x);
+}

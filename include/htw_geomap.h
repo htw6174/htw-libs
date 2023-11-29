@@ -79,7 +79,7 @@ static const float htw_geo_hexCornerPositions[6][2] = {
  *
  * Also corresponds to elements of htw_geo_cubeDirections and htw_geo_hexGridDirections
  */
-enum hexDirection {
+typedef enum HexDirection {
     HEX_DIRECTION_NORTH_EAST = 0, // 0, 1
     HEX_DIRECTION_EAST, // 1, 0
     HEX_DIRECTION_SOUTH_EAST, // 1, -1
@@ -87,13 +87,13 @@ enum hexDirection {
     HEX_DIRECTION_WEST, // -1, 0
     HEX_DIRECTION_NORTH_WEST, // -1, 1
     HEX_DIRECTION_COUNT // Limit for iterating over values in this enum
-};
+} HexDirection;
 
 /** Starts from the top and winds around clockwise
  *
  * Also corresponds to elements of htw_geo_hexCornerPositions
  */
-enum hexCorner {
+typedef enum HexCorner {
     HEX_CORNER_NORTH = 0,
     HEX_CORNER_NORTH_EAST,
     HEX_CORNER_SOUTH_EAST,
@@ -101,7 +101,7 @@ enum hexCorner {
     HEX_CORNER_SOUTH_WEST,
     HEX_CORNER_NORTH_WEST,
     HEX_CORNER_COUNT // Limit for iterating over values in this enum
-};
+} HexCorner;
 
 // Note on 'striped' vs 'chunked' layout for map tiles in memory:
 // 'striped' can be most performant for iterating over every tile in the map in order
@@ -162,18 +162,26 @@ void htw_geo_setMapValueByIndex(htw_ValueMap *map, u32 cellIndex, s32 value);
 void htw_geo_setMapValue(htw_ValueMap *map, htw_geo_GridCoord cellCoord, s32 value);
 void printValueMap(htw_ValueMap *map);
 
-/* Utilities for neighbors and tile position */
-// TODO/TEST: any perf difference from inlining these?
-static htw_geo_GridCoord htw_geo_indexToGridCoord(u32 cellIndex, u32 mapWidth);
-static u32 htw_geo_cellCoordToIndex(htw_geo_GridCoord cellCoord, u32 mapWidth);
-static u32 htw_geo_isEqualGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
-static htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
-// hexgrid.c
+/* Grid coord math, neighbors, and index conversion */
+htw_geo_GridCoord htw_geo_indexToGridCoord(u32 cellIndex, u32 mapWidth);
+u32 htw_geo_cellCoordToIndex(htw_geo_GridCoord cellCoord, u32 mapWidth);
+u32 htw_geo_isEqualGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
+htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
+HexDirection htw_geo_hexDirectionLeft(HexDirection dir);
+HexDirection htw_geo_hexDirectionRight(HexDirection dir);
+/// Return the hexDirection of b from a. Exact only for coaxial grid coords, otherwise will be the same for every coord in a 'slice' between 2 axies. For best results, use coords with distance(a, b) == 1. If a == b, returns -1
+HexDirection htw_geo_relativeHexDirection(htw_geo_GridCoord a, htw_geo_GridCoord b);
+
+/* Cube coord math and gridcoord conversion */
 u32 htw_geo_isEqualCubeCoords(htw_geo_CubeCoord a, htw_geo_CubeCoord b);
 htw_geo_CubeCoord htw_geo_addCubeCoords(htw_geo_CubeCoord a, htw_geo_CubeCoord b);
 htw_geo_CubeCoord htw_geo_gridToCubeCoord(htw_geo_GridCoord gridCoord);
 htw_geo_GridCoord htw_geo_cubeToGridCoord(htw_geo_CubeCoord cubeCoord);
 
+// Macro to get position in a hex direction
+#define POSITION_IN_DIRECTION(pos, dir) htw_geo_addGridCoords(pos, htw_geo_hexGridDirections[dir])
+
+/* Grid coord and cartesian position conversion */
 float htw_geo_cartesianToHexPositionX(float x, float y);
 float htw_geo_cartesianToHexPositionY(float y);
 float htw_geo_hexToCartesianPositionX(float x, float y);
@@ -185,8 +193,11 @@ void htw_geo_cartesianToHexFractional(float x, float y, float *q, float *r);
 htw_geo_GridCoord htw_geo_hexFractionalToHexCoord(float q, float r);
 htw_geo_GridCoord htw_geo_cartesianToHexCoord(float x, float y);
 
+/* Hex grid geometry */
+u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b);
 u32 htw_geo_hexMagnitude(htw_geo_CubeCoord cubeCoord);
 u32 htw_geo_getHexArea(u32 edgeLength);
+void htw_geo_getNextHexSpiralCoord(htw_geo_CubeCoord *iterCoord);
 
 /* Spatial Hashmaps */
 htw_SpatialStorage *htw_geo_createSpatialStorage(size_t maxItemCount);
@@ -223,31 +234,5 @@ s32 htw_geo_circularGradientByGridCoord(htw_ChunkMap *chunkMap, htw_geo_GridCoor
  * @return float
  */
 float htw_geo_simplex(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, u32 seed, u32 octaves, u32 samplesPerRepeat);
-
-
-static htw_geo_GridCoord htw_geo_indexToGridCoord(u32 cellIndex, u32 mapWidth) {
-    return (htw_geo_GridCoord){cellIndex % mapWidth, cellIndex / mapWidth};
-}
-
-static u32 htw_geo_cellCoordToIndex(htw_geo_GridCoord cellCoord, u32 mapWidth) {
-    return cellCoord.x + (cellCoord.y * mapWidth);
-}
-
-static u32 htw_geo_isEqualGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b) {
-    return a.x == b.x && a.y == b.y;
-}
-
-void htw_geo_getNextHexSpiralCoord(htw_geo_CubeCoord *iterCoord);
-
-static htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b) {
-    return (htw_geo_GridCoord){a.x + b.x, a.y + b.y};
-}
-
-static u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b) {
-    return (abs(a.x - b.x) + abs(a.x + a.y - b.x - b.y) + abs(a.y - b.y)) / 2;
-}
-
-// Macro to get position in a hex direction
-#define POSITION_IN_DIRECTION(pos, dir) htw_geo_addGridCoords(pos, htw_geo_hexGridDirections[dir])
 
 #endif

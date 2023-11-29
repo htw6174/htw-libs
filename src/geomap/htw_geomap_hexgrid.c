@@ -24,6 +24,44 @@ static inline s32 cube3rdAxis(s32 q, s32 r) {
     return -q - r;
 }
 
+htw_geo_GridCoord htw_geo_indexToGridCoord(u32 cellIndex, u32 mapWidth) {
+    return (htw_geo_GridCoord){cellIndex % mapWidth, cellIndex / mapWidth};
+}
+
+u32 htw_geo_cellCoordToIndex(htw_geo_GridCoord cellCoord, u32 mapWidth) {
+    return cellCoord.x + (cellCoord.y * mapWidth);
+}
+
+u32 htw_geo_isEqualGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b) {
+    return a.x == b.x && a.y == b.y;
+}
+
+htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b) {
+    return (htw_geo_GridCoord){a.x + b.x, a.y + b.y};
+}
+
+HexDirection htw_geo_hexDirectionLeft(HexDirection dir) {
+    return MOD(dir - 1, HEX_DIRECTION_COUNT);
+}
+
+HexDirection htw_geo_hexDirectionRight(HexDirection dir) {
+    return (dir + 1) % HEX_DIRECTION_COUNT;
+}
+
+static const HexDirection relLUT[3][3] = {
+    {HEX_DIRECTION_SOUTH_WEST, HEX_DIRECTION_SOUTH_WEST, HEX_DIRECTION_SOUTH_EAST},
+    {HEX_DIRECTION_WEST      , -1                      , HEX_DIRECTION_EAST      },
+    {HEX_DIRECTION_NORTH_WEST, HEX_DIRECTION_NORTH_EAST, HEX_DIRECTION_NORTH_EAST},
+};
+
+HexDirection htw_geo_relativeHexDirection(htw_geo_GridCoord a, htw_geo_GridCoord b) {
+    s32 relX = b.x - a.x;
+    s32 relY = b.y - a.y;
+    s32 dirX = SIGN(relX);
+    s32 dirY = SIGN(relY);
+    return relLUT[dirY+1][dirX+1];
+}
+
 htw_geo_CubeCoord htw_geo_addCubeCoords(htw_geo_CubeCoord a, htw_geo_CubeCoord b) {
     return (htw_geo_CubeCoord){a.q + b.q, a.r + b.r, a.s + b.s};
 }
@@ -92,6 +130,10 @@ htw_geo_GridCoord htw_geo_cartesianToHexCoord(float xCart, float yCart) {
     float q, r;
     htw_geo_cartesianToHexFractional(xCart, yCart, &q, &r);
     return htw_geo_hexFractionalToHexCoord(q, r);
+}
+
+u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b) {
+    return (abs(a.x - b.x) + abs(a.x + a.y - b.x - b.y) + abs(a.y - b.y)) / 2;
 }
 
 // distance from (0, 0, 0)

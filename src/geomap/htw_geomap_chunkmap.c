@@ -23,13 +23,13 @@ htw_ChunkMap *htw_geo_createChunkMap(u32 chunkSize, u32 chunkCountX, u32 chunkCo
     return newWorldMap;
 }
 
-void *htw_geo_getCell(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord) {
+void *htw_geo_getCell(const htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord) {
     u32 chunkIndex, cellIndex;
     htw_geo_gridCoordinateToChunkAndCellIndex(chunkMap, cellCoord, &chunkIndex, &cellIndex);
     return chunkMap->chunks[chunkIndex].cellData + (cellIndex * chunkMap->cellDataSize);
 }
 
-u32 htw_geo_getChunkIndexByChunkCoordinates(htw_ChunkMap *chunkMap, htw_geo_GridCoord chunkCoord) {
+u32 htw_geo_getChunkIndexByChunkCoordinates(const htw_ChunkMap *chunkMap, htw_geo_GridCoord chunkCoord) {
     // FIXME: this will not work if chunkCoord < -chunkCount, result will be % of a negative number (UB)
     // horizontal wrap
     chunkCoord.x += chunkMap->chunkCountX; // to account for negative chunkX
@@ -41,7 +41,7 @@ u32 htw_geo_getChunkIndexByChunkCoordinates(htw_ChunkMap *chunkMap, htw_geo_Grid
     return chunkIndex;
 }
 
-u32 htw_geo_getChunkIndexByGridCoordinates(htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord) {
+u32 htw_geo_getChunkIndexByGridCoordinates(const htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord) {
     htw_geo_GridCoord chunkCoord = {
         .x = gridCoord.x / chunkMap->chunkSize,
         .y = gridCoord.y / chunkMap->chunkSize
@@ -49,20 +49,20 @@ u32 htw_geo_getChunkIndexByGridCoordinates(htw_ChunkMap *chunkMap, htw_geo_GridC
     return htw_geo_getChunkIndexByChunkCoordinates(chunkMap, chunkCoord);
 }
 
-u32 htw_geo_getChunkIndexAtOffset(htw_ChunkMap *chunkMap, u32 startingChunk, htw_geo_GridCoord chunkOffset) {
+u32 htw_geo_getChunkIndexAtOffset(const htw_ChunkMap *chunkMap, u32 startingChunk, htw_geo_GridCoord chunkOffset) {
     htw_geo_GridCoord chunkCoord = htw_geo_chunkIndexToChunkCoordinates(chunkMap, startingChunk);
     chunkCoord = htw_geo_addGridCoords(chunkCoord, chunkOffset);
     return htw_geo_getChunkIndexByChunkCoordinates(chunkMap, chunkCoord);
 }
 
-htw_geo_GridCoord htw_geo_chunkIndexToChunkCoordinates(htw_ChunkMap *chunkMap, u32 chunkIndex) {
+htw_geo_GridCoord htw_geo_chunkIndexToChunkCoordinates(const htw_ChunkMap *chunkMap, u32 chunkIndex) {
     return (htw_geo_GridCoord){
         .x = chunkIndex % chunkMap->chunkCountX,
         .y = chunkIndex / chunkMap->chunkCountX
     };
 }
 
-void htw_geo_gridCoordinateToChunkAndCellIndex(htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord, u32 *chunkIndex, u32 *cellIndex) {
+void htw_geo_gridCoordinateToChunkAndCellIndex(const htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord, u32 *chunkIndex, u32 *cellIndex) {
     gridCoord = htw_geo_wrapGridCoordOnChunkMap(chunkMap, gridCoord);
 
     *chunkIndex = htw_geo_getChunkIndexByGridCoordinates(chunkMap, gridCoord);
@@ -74,7 +74,7 @@ void htw_geo_gridCoordinateToChunkAndCellIndex(htw_ChunkMap *chunkMap, htw_geo_G
     *cellIndex = cellCoord.x + (cellCoord.y * chunkMap->chunkSize);
 }
 
-htw_geo_GridCoord htw_geo_chunkAndCellToGridCoordinates(htw_ChunkMap *chunkMap, u32 chunkIndex, u32 cellIndex) {
+htw_geo_GridCoord htw_geo_chunkAndCellToGridCoordinates(const htw_ChunkMap *chunkMap, u32 chunkIndex, u32 cellIndex) {
     u32 chunkX = chunkIndex % chunkMap->chunkCountX;
     u32 chunkY = chunkIndex / chunkMap->chunkCountX;
     u32 cellX = cellIndex % chunkMap->chunkSize;
@@ -86,7 +86,7 @@ htw_geo_GridCoord htw_geo_chunkAndCellToGridCoordinates(htw_ChunkMap *chunkMap, 
     return worldCoord;
 }
 
-void htw_geo_getChunkRootPosition(htw_ChunkMap *chunkMap, u32 chunkIndex, float *worldX, float *worldY) {
+void htw_geo_getChunkRootPosition(const htw_ChunkMap *chunkMap, u32 chunkIndex, float *worldX, float *worldY) {
     u32 chunkX = chunkIndex % chunkMap->chunkCountX;
     u32 chunkY = chunkIndex / chunkMap->chunkCountX;
     s32 gridX = chunkX * chunkMap->chunkSize;
@@ -94,7 +94,7 @@ void htw_geo_getChunkRootPosition(htw_ChunkMap *chunkMap, u32 chunkIndex, float 
     htw_geo_getHexCellPositionSkewed((htw_geo_GridCoord){gridX, gridY}, worldX, worldY);
 }
 
-htw_geo_GridCoord htw_geo_wrapGridCoordOnChunkMap(htw_ChunkMap *chunkMap, htw_geo_GridCoord coord) {
+htw_geo_GridCoord htw_geo_wrapGridCoordOnChunkMap(const htw_ChunkMap *chunkMap, htw_geo_GridCoord coord) {
     // wrap coordinates by chunkMap dimensions; add width first to handle negatives
     // FIXME: this will not work if coord < -chunkMap size, result will be % of a negative number (UB)
     coord.x += chunkMap->mapWidth;
@@ -104,20 +104,20 @@ htw_geo_GridCoord htw_geo_wrapGridCoordOnChunkMap(htw_ChunkMap *chunkMap, htw_ge
     return coord;
 }
 
-htw_geo_GridCoord htw_geo_addGridCoordsWrapped(htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b) {
+htw_geo_GridCoord htw_geo_addGridCoordsWrapped(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b) {
     htw_geo_GridCoord result = htw_geo_addGridCoords(a, b);
     return htw_geo_wrapGridCoordOnChunkMap(chunkMap, result);
 }
 
-u32 htw_geo_getChunkMapHexDistance(htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b) {
+u32 htw_geo_getChunkMapHexDistance(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b) {
     // To resolve sDist properly, need to determine which of the 9 possible 'regions' to shift b into
     // First, determine for each axis which shift (+, -, or 0) is closer
     const s32 shifts[] = {-1, 0, 1};
     s32 qShift = 0;
     s32 rShift = 0;
-    s32 d1 = abs(a.x - b.x - chunkMap->mapWidth);
+    s32 d1 = abs(a.x - b.x - (s32)chunkMap->mapWidth);
     s32 d2 = abs(a.x - b.x);
-    s32 d3 = abs(a.x - b.x + chunkMap->mapWidth);
+    s32 d3 = abs(a.x - b.x + (s32)chunkMap->mapWidth);
     s32 qDist = abs(a.x - b.x);
     if (qDist > chunkMap->mapWidth / 2) {
         qDist = chunkMap->mapWidth - qDist;
@@ -137,7 +137,7 @@ u32 htw_geo_getChunkMapHexDistance(htw_ChunkMap *chunkMap, htw_geo_GridCoord a, 
 // Next find the simple distance, and the distance after moving point b into the nearby 'parallel dimensions' indicated by the offest directions
 // Return the lowest distance found
 // NOTE: maximum possible distance between 2 points in a wrapping hexmap is (mapWidth / 2.0) / cos(PI / 6.0), or the distance from corner to center of triangular area
-float htw_geo_hexCartesianDistance(htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b) {
+float htw_geo_hexCartesianDistance(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b) {
     float extentX = htw_geo_getHexPositionX(chunkMap->mapWidth, 0);
     float extentY = htw_geo_getHexPositionY(chunkMap->mapHeight);
     // How far to offset x when wrapping around vertically

@@ -102,7 +102,7 @@ void htw_geo_fillSimplex(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32
     }
 }
 
-s32 htw_geo_circularGradientByGridCoord(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, htw_geo_GridCoord center, s32 gradStart, s32 gradEnd, float radius) {
+s32 htw_geo_circularGradientByGridCoord(const htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, htw_geo_GridCoord center, s32 gradStart, s32 gradEnd, float radius) {
     float distance = htw_geo_hexCartesianDistance(chunkMap, cellCoord, center);
     s32 gradValue = 0;
     if (distance < radius) {

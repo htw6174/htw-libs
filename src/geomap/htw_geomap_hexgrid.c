@@ -41,11 +41,16 @@ htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b
 }
 
 HexDirection htw_geo_hexDirectionLeft(HexDirection dir) {
-    return MOD(dir - 1, HEX_DIRECTION_COUNT);
+    //return MOD(dir - 1, HEX_DIRECTION_COUNT);
+    return (dir + (HEX_DIRECTION_COUNT - 1)) % HEX_DIRECTION_COUNT;
 }
 
 HexDirection htw_geo_hexDirectionRight(HexDirection dir) {
     return (dir + 1) % HEX_DIRECTION_COUNT;
+}
+
+HexDirection htw_geo_hexDirectionOpposite(HexDirection dir) {
+    return (dir + 3) % HEX_DIRECTION_COUNT;
 }
 
 static const HexDirection relLUT[3][3] = {

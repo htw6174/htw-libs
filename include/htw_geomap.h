@@ -142,18 +142,18 @@ typedef struct {
 // Allocates a map and enough space for all map elements
 htw_ChunkMap *htw_geo_createChunkMap(u32 chunkSize, u32 chunkCountX, u32 chunkCountY, size_t cellDataSize);
 // NOTE: no out of bounds access possible through these methods, coordinates always wrap based on map size
-void *htw_geo_getCell(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord);
-u32 htw_geo_getChunkIndexByChunkCoordinates(htw_ChunkMap *chunkMap, htw_geo_GridCoord chunkCoord);
-u32 htw_geo_getChunkIndexByGridCoordinates(htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord);
-u32 htw_geo_getChunkIndexAtOffset(htw_ChunkMap *chunkMap, u32 startingChunk, htw_geo_GridCoord chunkOffset);
-htw_geo_GridCoord htw_geo_chunkIndexToChunkCoordinates(htw_ChunkMap *chunkMap, u32 chunkIndex);
-void htw_geo_gridCoordinateToChunkAndCellIndex(htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord, u32 *chunkIndex, u32 *cellIndex);
-htw_geo_GridCoord htw_geo_chunkAndCellToGridCoordinates(htw_ChunkMap *chunkMap, u32 chunkIndex, u32 cellIndex);
-void htw_geo_getChunkRootPosition(htw_ChunkMap *chunkMap, u32 chunkIndex, float *worldX, float *worldY);
-htw_geo_GridCoord htw_geo_wrapGridCoordOnChunkMap(htw_ChunkMap *chunkMap, htw_geo_GridCoord coord);
-htw_geo_GridCoord htw_geo_addGridCoordsWrapped(htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
-u32 htw_geo_getChunkMapHexDistance(htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
-float htw_geo_hexCartesianDistance(htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
+void *htw_geo_getCell(const htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord);
+u32 htw_geo_getChunkIndexByChunkCoordinates(const htw_ChunkMap *chunkMap, htw_geo_GridCoord chunkCoord);
+u32 htw_geo_getChunkIndexByGridCoordinates(const htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord);
+u32 htw_geo_getChunkIndexAtOffset(const htw_ChunkMap *chunkMap, u32 startingChunk, htw_geo_GridCoord chunkOffset);
+htw_geo_GridCoord htw_geo_chunkIndexToChunkCoordinates(const htw_ChunkMap *chunkMap, u32 chunkIndex);
+void htw_geo_gridCoordinateToChunkAndCellIndex(const htw_ChunkMap *chunkMap, htw_geo_GridCoord gridCoord, u32 *chunkIndex, u32 *cellIndex);
+htw_geo_GridCoord htw_geo_chunkAndCellToGridCoordinates(const htw_ChunkMap *chunkMap, u32 chunkIndex, u32 cellIndex);
+void htw_geo_getChunkRootPosition(const htw_ChunkMap *chunkMap, u32 chunkIndex, float *worldX, float *worldY);
+htw_geo_GridCoord htw_geo_wrapGridCoordOnChunkMap(const htw_ChunkMap *chunkMap, htw_geo_GridCoord coord);
+htw_geo_GridCoord htw_geo_addGridCoordsWrapped(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
+u32 htw_geo_getChunkMapHexDistance(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
+float htw_geo_hexCartesianDistance(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
 
 htw_ValueMap *htw_geo_createValueMap(u32 width, u32 height, s32 maxValue);
 s32 htw_geo_getMapValueByIndex(htw_ValueMap *map, u32 cellIndex);
@@ -169,6 +169,7 @@ u32 htw_geo_isEqualGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
 htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
 HexDirection htw_geo_hexDirectionLeft(HexDirection dir);
 HexDirection htw_geo_hexDirectionRight(HexDirection dir);
+HexDirection htw_geo_hexDirectionOpposite(HexDirection dir);
 /// Return the hexDirection of b from a. Exact only for coaxial grid coords, otherwise will be the same for every coord in a 'slice' between 2 axies. For best results, use coords with distance(a, b) == 1. If a == b, returns -1
 HexDirection htw_geo_relativeHexDirection(htw_geo_GridCoord a, htw_geo_GridCoord b);
 
@@ -222,7 +223,7 @@ void htw_geo_fillSimplex(htw_ValueMap* map, u32 seed, u32 octaves, s32 posX, s32
 // TODO?
 
 /* For getting single cell values: */
-s32 htw_geo_circularGradientByGridCoord(htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, htw_geo_GridCoord center, s32 gradStart, s32 gradEnd, float radius);
+s32 htw_geo_circularGradientByGridCoord(const htw_ChunkMap *chunkMap, htw_geo_GridCoord cellCoord, htw_geo_GridCoord center, s32 gradStart, s32 gradEnd, float radius);
 /**
  * @brief Simplex noise value for single cell on a hexagonal gridmap
  *

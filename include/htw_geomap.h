@@ -167,6 +167,8 @@ htw_geo_GridCoord htw_geo_indexToGridCoord(u32 cellIndex, u32 mapWidth);
 u32 htw_geo_cellCoordToIndex(htw_geo_GridCoord cellCoord, u32 mapWidth);
 u32 htw_geo_isEqualGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
 htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
+/// subtract b from a
+htw_geo_GridCoord htw_geo_subGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b);
 HexDirection htw_geo_hexDirectionLeft(HexDirection dir);
 HexDirection htw_geo_hexDirectionRight(HexDirection dir);
 HexDirection htw_geo_hexDirectionOpposite(HexDirection dir);

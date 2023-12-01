@@ -40,6 +40,10 @@ htw_geo_GridCoord htw_geo_addGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b
     return (htw_geo_GridCoord){a.x + b.x, a.y + b.y};
 }
 
+htw_geo_GridCoord htw_geo_subGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b) {
+    return (htw_geo_GridCoord){a.x - b.x, a.y - b.y};
+}
+
 HexDirection htw_geo_hexDirectionLeft(HexDirection dir) {
     //return MOD(dir - 1, HEX_DIRECTION_COUNT);
     return (dir + (HEX_DIRECTION_COUNT - 1)) % HEX_DIRECTION_COUNT;

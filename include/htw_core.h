@@ -70,9 +70,12 @@ static inline int htw_strToInt(const char *str) {
 #define DEG_TO_RAD      0.0174532925199f
 #define RAD_TO_DEG      57.2957795131f
 
-/// a % b, but gives the correct result when a is negative
+/// WARNING: multiple evaluation
+/// a modulo b. Different from a % b when a is negative
+/// NOTE: same result as a % b if a is negative and b is an unsigned type
 #define MOD(a, b) ((((a)%(b))+(b))%(b))
 
+/// WARNING: multiple evaluation
 /// Branchless sign. NOTE: SIGN(0) = 0
 #define SIGN(x) (((x) > 0) - ((x) < 0))
 
@@ -95,6 +98,7 @@ static inline int htw_strToInt(const char *str) {
 /// WARNING: multiple evaluation
 #define CLAMP(x, min, max) MAX(min, MIN(x, max))
 
+/// WARNING: multiple evaluation
 #define IS_POW_OF_2(x) ((((x) - 1) & (x)) == 0)
 
 /// returns the smallest multiple of alignment which is >= value

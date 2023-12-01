@@ -152,6 +152,8 @@ htw_geo_GridCoord htw_geo_chunkAndCellToGridCoordinates(const htw_ChunkMap *chun
 void htw_geo_getChunkRootPosition(const htw_ChunkMap *chunkMap, u32 chunkIndex, float *worldX, float *worldY);
 htw_geo_GridCoord htw_geo_wrapGridCoordOnChunkMap(const htw_ChunkMap *chunkMap, htw_geo_GridCoord coord);
 htw_geo_GridCoord htw_geo_addGridCoordsWrapped(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
+/// Magnitude of any dimension of a vector in wrapped space will never be greater than 1/2 the extent of the same dimension of the space
+htw_geo_GridCoord htw_geo_wrapVectorOnChunkMap(const htw_ChunkMap *chunkMap, htw_geo_GridCoord vec);
 u32 htw_geo_getChunkMapHexDistance(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
 float htw_geo_hexCartesianDistance(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b);
 
@@ -172,6 +174,8 @@ htw_geo_GridCoord htw_geo_subGridCoords(htw_geo_GridCoord a, htw_geo_GridCoord b
 HexDirection htw_geo_hexDirectionLeft(HexDirection dir);
 HexDirection htw_geo_hexDirectionRight(HexDirection dir);
 HexDirection htw_geo_hexDirectionOpposite(HexDirection dir);
+/// Return HexDirection 'slice' that the endpoint of vec lies in
+HexDirection htw_geo_vectorHexDirection(htw_geo_GridCoord vec);
 /// Return the hexDirection of b from a. Exact only for coaxial grid coords, otherwise will be the same for every coord in a 'slice' between 2 axies. For best results, use coords with distance(a, b) == 1. If a == b, returns -1
 HexDirection htw_geo_relativeHexDirection(htw_geo_GridCoord a, htw_geo_GridCoord b);
 
@@ -198,7 +202,9 @@ htw_geo_GridCoord htw_geo_cartesianToHexCoord(float x, float y);
 
 /* Hex grid geometry */
 u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b);
-u32 htw_geo_hexMagnitude(htw_geo_CubeCoord cubeCoord);
+u32 htw_geo_hexCubeDistance(htw_geo_CubeCoord a, htw_geo_CubeCoord b);
+u32 htw_geo_hexGridMagnitude(htw_geo_GridCoord vec);
+u32 htw_geo_hexCubeMagnitude(htw_geo_CubeCoord vec);
 u32 htw_geo_getHexArea(u32 edgeLength);
 void htw_geo_getNextHexSpiralCoord(htw_geo_CubeCoord *iterCoord);
 

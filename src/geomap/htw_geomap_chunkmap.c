@@ -95,12 +95,8 @@ void htw_geo_getChunkRootPosition(const htw_ChunkMap *chunkMap, u32 chunkIndex, 
 }
 
 htw_geo_GridCoord htw_geo_wrapGridCoordOnChunkMap(const htw_ChunkMap *chunkMap, htw_geo_GridCoord coord) {
-    // wrap coordinates by chunkMap dimensions; add width first to handle negatives
-    // FIXME: this will not work if coord < -chunkMap size, result will be % of a negative number (UB)
-    coord.x += chunkMap->mapWidth;
-    coord.x %= chunkMap->mapWidth;
-    coord.y += chunkMap->mapHeight;
-    coord.y %= chunkMap->mapHeight;
+    coord.x = MOD(coord.x, (s32)chunkMap->mapWidth);
+    coord.y = MOD(coord.y, (s32)chunkMap->mapHeight);
     return coord;
 }
 
@@ -109,27 +105,18 @@ htw_geo_GridCoord htw_geo_addGridCoordsWrapped(const htw_ChunkMap *chunkMap, htw
     return htw_geo_wrapGridCoordOnChunkMap(chunkMap, result);
 }
 
+htw_geo_GridCoord htw_geo_wrapVectorOnChunkMap(const htw_ChunkMap *chunkMap, htw_geo_GridCoord vec) {
+    // Shift into middle of chunk map, wrap, then shift result back to origin
+    htw_geo_GridCoord shift = {chunkMap->mapWidth / 2, chunkMap->mapHeight / 2};
+    htw_geo_GridCoord wrapped = htw_geo_addGridCoords(vec, shift);
+    wrapped = htw_geo_wrapGridCoordOnChunkMap(chunkMap, wrapped);
+    wrapped = htw_geo_subGridCoords(wrapped, shift);
+    return wrapped;
+}
+
 u32 htw_geo_getChunkMapHexDistance(const htw_ChunkMap *chunkMap, htw_geo_GridCoord a, htw_geo_GridCoord b) {
-    // To resolve sDist properly, need to determine which of the 9 possible 'regions' to shift b into
-    // First, determine for each axis which shift (+, -, or 0) is closer
-    const s32 shifts[] = {-1, 0, 1};
-    s32 qShift = 0;
-    s32 rShift = 0;
-    s32 d1 = abs(a.x - b.x - (s32)chunkMap->mapWidth);
-    s32 d2 = abs(a.x - b.x);
-    s32 d3 = abs(a.x - b.x + (s32)chunkMap->mapWidth);
-    s32 qDist = abs(a.x - b.x);
-    if (qDist > chunkMap->mapWidth / 2) {
-        qDist = chunkMap->mapWidth - qDist;
-        qShift = chunkMap->mapWidth;
-    }
-    s32 rDist = abs(a.y - b.y);
-    if (rDist > chunkMap->mapHeight / 2) {
-        rDist = chunkMap->mapHeight - rDist;
-        rShift = chunkMap->mapHeight;
-    }
-    s32 sDist = abs(a.x + a.y - (b.x + qShift) - (b.y + rShift));
-    return (qDist + rDist + sDist) / 2;
+    // convert to vector, return magnitude
+    return htw_geo_hexGridMagnitude(htw_geo_wrapVectorOnChunkMap(chunkMap, htw_geo_subGridCoords(b, a)));
 }
 
 // More complicated than a typical wrapped space distance check because of the effect y position has on x offset

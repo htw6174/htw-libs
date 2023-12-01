@@ -63,12 +63,14 @@ static const HexDirection relLUT[3][3] = {
     {HEX_DIRECTION_NORTH_WEST, HEX_DIRECTION_NORTH_EAST, HEX_DIRECTION_NORTH_EAST},
 };
 
-HexDirection htw_geo_relativeHexDirection(htw_geo_GridCoord a, htw_geo_GridCoord b) {
-    s32 relX = b.x - a.x;
-    s32 relY = b.y - a.y;
-    s32 dirX = SIGN(relX);
-    s32 dirY = SIGN(relY);
+HexDirection htw_geo_vectorHexDirection(htw_geo_GridCoord vec) {
+    s32 dirX = SIGN(vec.x);
+    s32 dirY = SIGN(vec.y);
     return relLUT[dirY+1][dirX+1];
+}
+
+HexDirection htw_geo_relativeHexDirection(htw_geo_GridCoord a, htw_geo_GridCoord b) {
+    return htw_geo_vectorHexDirection(htw_geo_subGridCoords(b, a));
 }
 
 htw_geo_CubeCoord htw_geo_addCubeCoords(htw_geo_CubeCoord a, htw_geo_CubeCoord b) {
@@ -145,9 +147,16 @@ u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b) {
     return (abs(a.x - b.x) + abs(a.x + a.y - b.x - b.y) + abs(a.y - b.y)) / 2;
 }
 
-// distance from (0, 0, 0)
-u32 htw_geo_hexMagnitude(htw_geo_CubeCoord cubeCoord) {
-    return (abs(cubeCoord.q) + abs(cubeCoord.r) + abs(cubeCoord.s)) / 2;
+u32 htw_geo_hexCubeDistance(htw_geo_CubeCoord a, htw_geo_CubeCoord b) {
+    return (abs(a.q - b.q) + abs(a.r - b.r) + abs(a.s - b.s)) / 2;
+}
+
+u32 htw_geo_hexGridMagnitude(htw_geo_GridCoord vec) {
+    return (abs(vec.x) + abs(-vec.x - vec.y) + abs(vec.y)) / 2;
+}
+
+u32 htw_geo_hexCubeMagnitude(htw_geo_CubeCoord vec) {
+    return (abs(vec.q) + abs(vec.r) + abs(vec.s)) / 2;
 }
 
 // perimeter given in cells. edgeLength 0 is undefined.

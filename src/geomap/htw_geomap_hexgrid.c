@@ -143,6 +143,18 @@ htw_geo_GridCoord htw_geo_cartesianToHexCoord(float xCart, float yCart) {
     return htw_geo_hexFractionalToHexCoord(q, r);
 }
 
+u32 htw_geo_cartesianToHexChunkIndex(htw_ChunkMap *chunkMap, float x, float y) {
+    // reverse hex grid coordinate skewing
+    float deskewedY = (1.0 / sqrt(0.75)) * y;
+    float deskewedX = x - (deskewedY * 0.5);
+    // convert to chunk grid coordinates
+    htw_geo_GridCoord chunkCoord = {
+        .x = floorf(deskewedX / chunkMap->chunkSize),
+        .y = floorf(deskewedY / chunkMap->chunkSize)
+    };
+    return htw_geo_getChunkIndexByChunkCoordinates(chunkMap, chunkCoord);
+}
+
 u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b) {
     return (abs(a.x - b.x) + abs(a.x + a.y - b.x - b.y) + abs(a.y - b.y)) / 2;
 }

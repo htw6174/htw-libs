@@ -199,6 +199,7 @@ void htw_geo_getHexCellPositionSkewed(htw_geo_GridCoord gridCoord, float *xPos, 
 void htw_geo_cartesianToHexFractional(float x, float y, float *q, float *r);
 htw_geo_GridCoord htw_geo_hexFractionalToHexCoord(float q, float r);
 htw_geo_GridCoord htw_geo_cartesianToHexCoord(float x, float y);
+u32 htw_geo_cartesianToHexChunkIndex(htw_ChunkMap *chunkMap, float x, float y);
 
 /* Hex grid geometry */
 u32 htw_geo_hexGridDistance(htw_geo_GridCoord a, htw_geo_GridCoord b);

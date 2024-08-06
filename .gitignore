@@ -2,4 +2,6 @@ build/
 release/
 .kdev4/
 .cache/
+.zig-cache/
+zig-out/
 *.kdev4
